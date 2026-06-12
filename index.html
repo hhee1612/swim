@@ -234,8 +234,11 @@ function App() {
           <ViewTab active={view === "calendar"} onClick={() => setView("calendar")}>📅 日历</ViewTab>
         </div>
 
-        {view === "list" && (records.length === 0 ? <Empty /> : (
-          <div className="space-y-3">{records.map((r) => <RecordCard key={r.id} r={r} photo={photos[r.id]} onDel={() => del(r.id)} onPhoto={() => setLightbox(photos[r.id])} />)}</div>
+        {view === "list" && (records.length === 0 ? <Empty onAdd={() => setShowForm(true)} /> : (
+          <div>
+            <button onClick={() => setShowForm(true)} className="w-full mb-3 bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white font-bold py-3 rounded-2xl shadow-lg flex items-center justify-center gap-2">＋ 记录今天</button>
+            <div className="space-y-3">{records.map((r) => <RecordCard key={r.id} r={r} photo={photos[r.id]} onDel={() => del(r.id)} onPhoto={() => setLightbox(photos[r.id])} />)}</div>
+          </div>
         ))}
 
         {view === "calendar" && (
@@ -277,8 +280,6 @@ function App() {
           </div>
         )}
       </div>
-
-      {!showForm && <button onClick={() => setShowForm(true)} className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white font-bold px-7 py-3.5 rounded-full shadow-lg flex items-center gap-2">＋ 记录今天</button>}
 
       {showForm && (
         <div className="fixed inset-0 bg-purple-900/30 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
@@ -341,7 +342,7 @@ function RecordCard({ r, photo, onDel, onPhoto, hideDate }) {
     </div>
   );
 }
-function Empty() { return <div className="text-center text-purple-400 bg-white/60 rounded-3xl py-12 px-4"><div className="text-3xl mb-2">🌊</div><p className="font-bold">还没有记录哦～</p><p className="text-sm mt-1">点击下面的按钮，记录今天的游泳吧！</p></div>; }
+function Empty({ onAdd }) { return <div className="text-center text-purple-400 bg-white/60 rounded-3xl py-12 px-4"><div className="text-3xl mb-2">🌊</div><p className="font-bold">还没有记录哦～</p><p className="text-sm mt-1 mb-4">点击下面的按钮，记录今天的游泳吧！</p><button onClick={onAdd} className="bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white font-bold px-7 py-3 rounded-full shadow-lg inline-flex items-center gap-2">＋ 记录今天</button></div>; }
 function Stat({ label, value, unit }) { return <div className="bg-white rounded-2xl py-3 px-2 text-center shadow-sm"><div className="text-xl font-extrabold text-purple-600">{value}</div><div className="text-[11px] text-purple-400 font-bold mt-0.5">{label} ({unit})</div></div>; }
 function MonthStat({ value, unit, label }) { return <div><div className="text-lg font-extrabold">{value}</div><div className="text-[11px] text-purple-100 font-bold">{label} ({unit})</div></div>; }
 function ViewTab({ active, onClick, children }) { return <button onClick={onClick} className={"flex-1 py-2 rounded-xl text-sm font-bold transition " + (active ? "bg-white text-purple-600 shadow-sm" : "text-purple-400")}>{children}</button>; }
