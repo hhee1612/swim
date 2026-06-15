@@ -15,93 +15,103 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    html, body { margin: 0; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+    html, body { margin: 0; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; background: #f5ecff; }
     * { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-text-size-adjust: 100%; }
-    input, textarea, button, select { font-size: 16px; } /* 防止 iOS 聚焦自动放大 */
+    input, textarea, button, select { font-size: 16px; }
     .safe-top { padding-top: env(safe-area-inset-top); }
-    .safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 1rem); }
+    .safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 1.25rem); }
+    .bubble { position: fixed; border-radius: 9999px; pointer-events: none; z-index: 0; background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.85), rgba(192,132,252,.18)); animation: float 7s ease-in-out infinite; }
+    @keyframes float { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-22px) scale(1.04); } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pop { 0% { transform: scale(.7); opacity: 0; } 70% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    @keyframes grow { from { height: 0; } }
+    .fade-up { animation: fadeUp .5s ease both; }
+    .pop { animation: pop .45s cubic-bezier(.34,1.56,.64,1) both; }
+    .shine { background-size: 200% 100%; animation: shimmer 2.6s linear infinite; }
+    .bar-grow { animation: grow .6s ease both; }
+    .card { box-shadow: 0 6px 24px -8px rgba(168,85,247,.28), 0 2px 6px -2px rgba(168,85,247,.12); }
+    .card-flat { box-shadow: 0 3px 14px -6px rgba(168,85,247,.22); }
+    ::-webkit-scrollbar { width: 0; }
   </style>
 </head>
 <body>
+  <div class="bubble" style="width:120px;height:120px;top:8%;left:-30px;animation-delay:0s"></div>
+  <div class="bubble" style="width:70px;height:70px;top:32%;right:-12px;animation-delay:1.5s"></div>
+  <div class="bubble" style="width:50px;height:50px;top:62%;left:8%;animation-delay:.8s"></div>
+  <div class="bubble" style="width:90px;height:90px;bottom:6%;right:4%;animation-delay:2.2s"></div>
   <div id="root"></div>
   <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef } = React;
 
 const MOODS = [
-  { emoji: "😄", label: "超开心" },
-  { emoji: "🙂", label: "还不错" },
-  { emoji: "😮‍💨", label: "有点累" },
-  { emoji: "😴", label: "好困" },
-  { emoji: "💪", label: "超有劲" },
+  { emoji: "😄", label: "超开心" }, { emoji: "🙂", label: "还不错" }, { emoji: "😮‍💨", label: "有点累" }, { emoji: "😴", label: "好困" }, { emoji: "💪", label: "超有劲" },
 ];
-const DEFAULT_GOAL = 100000;
+const STROKES = ["自由泳", "蛙泳", "仰泳", "蝶泳", "混合"];
+const DEFAULT_GOAL = { type: "distance", value: 100 };
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
-// ===== 勋章等级（按累计签到天数解锁）=====
 const BADGES = [
   { d: 1, emoji: "🐣", name: "游泳萌新", color: "from-amber-300 to-yellow-400" },
-  { d: 3, emoji: "🐠", name: "快乐小鱼", color: "from-cyan-300 to-sky-400" },
-  { d: 7, emoji: "🐬", name: "灵动海豚", color: "from-sky-400 to-blue-500" },
-  { d: 15, emoji: "🐳", name: "深海鲸鱼", color: "from-blue-500 to-indigo-500" },
-  { d: 30, emoji: "🥉", name: "铜牌泳将", color: "from-orange-400 to-amber-600" },
-  { d: 60, emoji: "🥈", name: "银牌健将", color: "from-slate-300 to-slate-500" },
-  { d: 100, emoji: "🥇", name: "金牌冠军", color: "from-yellow-400 to-amber-500" },
-  { d: 200, emoji: "👑", name: "奥运传奇", color: "from-fuchsia-500 to-purple-600" },
+  { d: 7, emoji: "🐠", name: "快乐小鱼", color: "from-cyan-300 to-sky-400" },
+  { d: 21, emoji: "🐬", name: "灵动海豚", color: "from-sky-400 to-blue-500" },
+  { d: 50, emoji: "🐳", name: "深海鲸鱼", color: "from-blue-500 to-indigo-500" },
+  { d: 100, emoji: "🥉", name: "铜牌泳将", color: "from-orange-400 to-amber-600" },
+  { d: 200, emoji: "🥈", name: "银牌健将", color: "from-slate-300 to-slate-500" },
+  { d: 365, emoji: "🥇", name: "金牌冠军", color: "from-yellow-400 to-amber-500" },
+  { d: 500, emoji: "👑", name: "奥运传奇", color: "from-fuchsia-500 to-purple-600" },
 ];
-function getBadgeInfo(days) {
-  let current = null, next = null;
-  for (const b of BADGES) {
-    if (days >= b.d) current = b;
-    else { next = b; break; }
+function getBadgeInfo(days) { let c = null, n = null; for (const b of BADGES) { if (days >= b.d) c = b; else { n = b; break; } } return { current: c, next: n }; }
+
+function paceSeconds(distance, duration) { if (!distance || !duration) return null; return (duration * 60 / distance) * 100; }
+function fmtPace(sec) { if (sec == null) return null; const m = Math.floor(sec / 60), s = Math.round(sec % 60); return m + "'" + String(s).padStart(2, "0") + '"'; }
+function paceStr(distance, duration) { return fmtPace(paceSeconds(distance, duration)); }
+
+function longestStreak(records) {
+  const dates = [...new Set(records.filter((r) => r.swam).map((r) => r.date))].sort();
+  let best = 0, cur = 0, prev = null;
+  for (const d of dates) {
+    if (prev) { const diff = (new Date(d) - new Date(prev)) / 86400000; cur = diff === 1 ? cur + 1 : 1; } else cur = 1;
+    best = Math.max(best, cur); prev = d;
   }
-  return { current, next };
+  return best;
+}
+
+function goalInfo(goal, totalDistance, totalCount, streak) {
+  if (goal.type === "count") {
+    const pct = Math.min(100, totalCount / goal.value * 100), done = totalCount >= goal.value;
+    return { title: "🏆 游泳次数目标", edit: "目标 " + goal.value + "次", pct, text: "已游 " + totalCount + " 次（" + pct.toFixed(0) + "%）" + (done ? " · 🎉 达成！" : " · 还差 " + (goal.value - totalCount) + " 次") };
+  }
+  if (goal.type === "days") {
+    const pct = Math.min(100, streak / goal.value * 100), done = streak >= goal.value;
+    return { title: "🏆 连续打卡目标", edit: "目标 连续" + goal.value + "天", pct, text: "已连续 " + streak + " 天（" + pct.toFixed(0) + "%）" + (done ? " · 🎉 达成！" : " · 还差 " + (goal.value - streak) + " 天") };
+  }
+  const pct = Math.min(100, totalDistance / (goal.value * 1000) * 100), remain = Math.max(0, goal.value * 1000 - totalDistance);
+  return { title: "🏆 离目标还有多远", edit: "目标 " + goal.value + "km", pct, text: "已游 " + (totalDistance / 1000).toFixed(2) + " km（" + pct.toFixed(1) + "%）" + (remain > 0 ? " · 还差 " + (remain / 1000).toFixed(2) + " km 达成目标！" : " · 🎉 目标达成！太强了！") };
 }
 
 const store = {
   get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
   set(key, val) { try { localStorage.setItem(key, val); } catch (e) { alert("存储空间不足，照片太多啦，建议先导出备份～"); } },
   del(key) { try { localStorage.removeItem(key); } catch (e) {} },
-  keys(prefix) {
-    const out = [];
-    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(prefix)) out.push(k); } } catch (e) {}
-    return out;
-  },
+  keys(prefix) { const out = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(prefix)) out.push(k); } } catch (e) {} return out; },
 };
 
-function todayStr() {
-  const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
-function dstr(d) {
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
+function todayStr() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+function dstr(d) { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
 function calcStreak(records) {
-  const swamDates = new Set(records.filter((r) => r.swam).map((r) => r.date));
-  if (swamDates.size === 0) return 0;
+  const sd = new Set(records.filter((r) => r.swam).map((r) => r.date));
+  if (sd.size === 0) return 0;
   let streak = 0, cursor = new Date(todayStr() + "T00:00:00");
-  if (!swamDates.has(dstr(cursor))) { cursor.setDate(cursor.getDate() - 1); if (!swamDates.has(dstr(cursor))) return 0; }
-  while (swamDates.has(dstr(cursor))) { streak++; cursor.setDate(cursor.getDate() - 1); }
+  if (!sd.has(dstr(cursor))) { cursor.setDate(cursor.getDate() - 1); if (!sd.has(dstr(cursor))) return 0; }
+  while (sd.has(dstr(cursor))) { streak++; cursor.setDate(cursor.getDate() - 1); }
   return streak;
 }
 function compressImage(file, maxDim = 700, quality = 0.6) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > height && width > maxDim) { height = (height * maxDim) / width; width = maxDim; }
-        else if (height > maxDim) { width = (width * maxDim) / height; height = maxDim; }
-        const c = document.createElement("canvas");
-        c.width = width; c.height = height;
-        c.getContext("2d").drawImage(img, 0, 0, width, height);
-        resolve(c.toDataURL("image/jpeg", quality));
-      };
-      img.onerror = reject;
-      img.src = e.target.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    reader.onload = (e) => { const img = new Image(); img.onload = () => { let { width, height } = img; if (width > height && width > maxDim) { height = (height * maxDim) / width; width = maxDim; } else if (height > maxDim) { width = (width * maxDim) / height; height = maxDim; } const c = document.createElement("canvas"); c.width = width; c.height = height; c.getContext("2d").drawImage(img, 0, 0, width, height); resolve(c.toDataURL("image/jpeg", quality)); }; img.onerror = reject; img.src = e.target.result; };
+    reader.onerror = reject; reader.readAsDataURL(file);
   });
 }
 
@@ -111,16 +121,21 @@ function App() {
   const [goal, setGoal] = useState(DEFAULT_GOAL);
   const [showForm, setShowForm] = useState(false);
   const [view, setView] = useState("list");
-  const [editingGoal, setEditingGoal] = useState(false);
-  const [goalInput, setGoalInput] = useState("");
+  const [showGoal, setShowGoal] = useState(false);
+  const [goalType, setGoalType] = useState("distance");
+  const [goalVal, setGoalVal] = useState("");
   const [viewMonth, setViewMonth] = useState(todayStr().slice(0, 7));
   const [dayDetail, setDayDetail] = useState(null);
   const [lightbox, setLightbox] = useState(null);
+  const [showBackup, setShowBackup] = useState(false);
+  const [celebrate, setCelebrate] = useState(null);
   const fileRef = useRef(null);
+  const importRef = useRef(null);
 
   const [date, setDate] = useState(todayStr());
   const [swam, setSwam] = useState(true);
   const [mood, setMood] = useState(MOODS[0]);
+  const [stroke, setStroke] = useState(STROKES[0]);
   const [distance, setDistance] = useState("");
   const [duration, setDuration] = useState("");
   const [pool, setPool] = useState("");
@@ -131,38 +146,36 @@ function App() {
     const r = store.get("swim-records");
     if (r) try { setRecords(JSON.parse(r)); } catch (e) {}
     const g = store.get("swim-goal");
-    if (g) setGoal(Number(g) || DEFAULT_GOAL);
+    if (g) { try { const p = JSON.parse(g); if (p && typeof p === "object" && p.type) setGoal(p); else setGoal({ type: "distance", value: (Number(g) || 100000) / 1000 }); } catch (e) { setGoal({ type: "distance", value: (Number(g) || 100000) / 1000 }); } }
     const ph = {};
     for (const k of store.keys("swim-photo:")) { const v = store.get(k); if (v) ph[k.replace("swim-photo:", "")] = v; }
     setPhotos(ph);
   }, []);
 
   function save(next) { setRecords(next); store.set("swim-records", JSON.stringify(next)); }
-  function saveGoal(km) {
-    const m = Math.max(1, Math.round(Number(km) * 1000)) || DEFAULT_GOAL;
-    setGoal(m); setEditingGoal(false); store.set("swim-goal", String(m));
-  }
-  function resetForm() {
-    setDate(todayStr()); setSwam(true); setMood(MOODS[0]); setDistance(""); setDuration(""); setPool(""); setNote(""); setPhoto(null);
-  }
-  async function onPickPhoto(e) {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    try { setPhoto(await compressImage(file)); } catch (err) {}
-  }
+  function openGoal() { setGoalType(goal.type); setGoalVal(String(goal.value)); setShowGoal(true); }
+  function saveGoal() { const v = Math.max(1, Math.round(Number(goalVal))) || 1; const g = { type: goalType, value: v }; setGoal(g); store.set("swim-goal", JSON.stringify(g)); setShowGoal(false); }
+  function resetForm() { setDate(todayStr()); setSwam(true); setMood(MOODS[0]); setStroke(STROKES[0]); setDistance(""); setDuration(""); setPool(""); setNote(""); setPhoto(null); }
+  async function onPickPhoto(e) { const file = e.target.files && e.target.files[0]; if (!file) return; try { setPhoto(await compressImage(file)); } catch (err) {} }
+
   function addRecord() {
     const id = Date.now();
-    const rec = {
-      id, date, swam,
-      mood: swam ? mood : null,
-      distance: swam ? Number(distance) || 0 : 0,
-      duration: swam ? Number(duration) || 0 : 0,
-      pool: swam ? pool.trim() : "",
-      note: note.trim(), hasPhoto: !!photo,
-    };
+    const dist = swam ? Number(distance) || 0 : 0, dur = swam ? Number(duration) || 0 : 0;
+    // 记录前的个人最佳，用于判断是否破纪录
+    const prevSwam = records.filter((r) => r.swam);
+    const oldMaxDist = Math.max(0, ...prevSwam.map((r) => r.distance));
+    const oldPaces = prevSwam.map((r) => paceSeconds(r.distance, r.duration)).filter((x) => x != null);
+    const oldBestPace = oldPaces.length ? Math.min(...oldPaces) : null;
+    const rec = { id, date, swam, mood: swam ? mood : null, stroke: swam ? stroke : null, distance: dist, duration: dur, pool: swam ? pool.trim() : "", note: note.trim(), hasPhoto: !!photo };
     const next = [rec, ...records].sort((a, b) => b.date.localeCompare(a.date));
     if (photo) { store.set("swim-photo:" + id, photo); setPhotos((p) => ({ ...p, [id]: photo })); }
     save(next); resetForm(); setShowForm(false);
+    // 破纪录庆祝
+    if (swam) {
+      const newPace = paceSeconds(dist, dur);
+      if (dist > 0 && dist > oldMaxDist && oldMaxDist > 0) setCelebrate({ icon: "🌊", title: "新纪录！", desc: "最长距离 " + dist + " 米！" });
+      else if (newPace != null && oldBestPace != null && newPace < oldBestPace) setCelebrate({ icon: "⚡", title: "配速新纪录！", desc: "最快 " + fmtPace(newPace) + " / 100m！" });
+    }
   }
   function del(id) {
     save(records.filter((r) => r.id !== id));
@@ -170,254 +183,309 @@ function App() {
     setDayDetail(null);
   }
   function exportCSV() {
-    const header = ["日期", "是否游泳", "心情", "距离(米)", "时间(分钟)", "游泳馆", "备注"];
-    const rows = [...records].sort((a, b) => a.date.localeCompare(b.date)).map((r) => [
-      r.date, r.swam ? "游了" : "没游",
-      r.swam && r.mood ? r.mood.emoji + r.mood.label : "",
-      r.swam ? r.distance : "", r.swam ? r.duration : "",
-      r.pool || "", (r.note || "").replace(/"/g, '""'),
-    ]);
+    const header = ["日期", "是否游泳", "心情", "泳姿", "距离(米)", "时间(分钟)", "配速(每百米)", "游泳馆", "备注"];
+    const rows = [...records].sort((a, b) => a.date.localeCompare(b.date)).map((r) => [r.date, r.swam ? "游了" : "没游", r.swam && r.mood ? r.mood.emoji + r.mood.label : "", r.swam ? (r.stroke || "") : "", r.swam ? r.distance : "", r.swam ? r.duration : "", r.swam ? (paceStr(r.distance, r.duration) || "") : "", r.pool || "", (r.note || "").replace(/"/g, '""')]);
     const csv = "\ufeff" + [header, ...rows].map((row) => row.map((c) => '"' + c + '"').join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "游泳记录_" + todayStr() + ".csv"; a.click();
-    URL.revokeObjectURL(url);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "游泳记录_" + todayStr() + ".csv"; a.click(); URL.revokeObjectURL(url);
+  }
+  function exportBackup() {
+    const data = { version: 1, exportedAt: new Date().toISOString(), goal, records, photos };
+    const blob = new Blob([JSON.stringify(data)], { type: "application/json" }); const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "游泳备份_" + todayStr() + ".json"; a.click(); URL.revokeObjectURL(url);
+  }
+  function importBackup(e) {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!data || !Array.isArray(data.records)) throw new Error("bad");
+        if (!confirm("导入将覆盖当前所有记录和照片，确定继续吗？\n（建议先备份当前数据）")) return;
+        store.set("swim-records", JSON.stringify(data.records));
+        if (data.goal) store.set("swim-goal", JSON.stringify(typeof data.goal === "object" ? data.goal : { type: "distance", value: (Number(data.goal) || 100000) / 1000 }));
+        for (const k of store.keys("swim-photo:")) store.del(k);
+        const ph = data.photos || {}; for (const id in ph) store.set("swim-photo:" + id, ph[id]);
+        setRecords(data.records); if (data.goal) setGoal(typeof data.goal === "object" ? data.goal : { type: "distance", value: (Number(data.goal) || 100000) / 1000 }); setPhotos(ph); setShowBackup(false);
+        alert("✅ 恢复成功！共 " + data.records.length + " 条记录");
+      } catch (err) { alert("❌ 导入失败，文件可能损坏或不是本 App 的备份文件"); }
+    };
+    reader.readAsText(file);
   }
 
   const swamRecords = records.filter((r) => r.swam);
   const totalDays = swamRecords.length;
   const totalDistance = swamRecords.reduce((s, r) => s + r.distance, 0);
-  const thisMonthCount = swamRecords.filter((r) => r.date.startsWith(todayStr().slice(0, 7))).length;
-  const progress = Math.min(100, (totalDistance / goal) * 100);
-  const remaining = Math.max(0, goal - totalDistance);
+  const totalTime = swamRecords.reduce((s, r) => s + r.duration, 0);
   const streak = calcStreak(records);
   const { current: curBadge, next: nextBadge } = getBadgeInfo(totalDays);
+  const avgPace = paceStr(totalDistance, totalTime);
+  const gi = goalInfo(goal, totalDistance, totalDays, streak);
+
+  // 个人最佳
+  const pbDist = Math.max(0, ...swamRecords.map((r) => r.distance));
+  const pbTime = Math.max(0, ...swamRecords.map((r) => r.duration));
+  const pbPaces = swamRecords.map((r) => paceSeconds(r.distance, r.duration)).filter((x) => x != null);
+  const pbPace = pbPaces.length ? fmtPace(Math.min(...pbPaces)) : null;
+  const pbStreak = longestStreak(records);
+
+  // 泳姿统计
+  const strokeCount = {}; for (const r of swamRecords) { if (r.stroke) strokeCount[r.stroke] = (strokeCount[r.stroke] || 0) + 1; }
+  const strokeList = STROKES.map((s) => ({ name: s, count: strokeCount[s] || 0 })).filter((s) => s.count > 0).sort((a, b) => b.count - a.count);
+  const strokeMax = Math.max(1, ...strokeList.map((s) => s.count));
+
+  const recentSessions = [...swamRecords].filter((r) => r.distance > 0).sort((a, b) => a.date.localeCompare(b.date)).slice(-10);
+  const recentMax = Math.max(1, ...recentSessions.map((r) => r.distance));
+
+  const monthMap = {}; for (const r of swamRecords) { const m = r.date.slice(0, 7); monthMap[m] = (monthMap[m] || 0) + r.distance; }
+  const monthsArr = []; { const d = new Date(); for (let i = 5; i >= 0; i--) { const dd = new Date(d.getFullYear(), d.getMonth() - i, 1); const key = dd.getFullYear() + "-" + String(dd.getMonth() + 1).padStart(2, "0"); monthsArr.push({ label: (dd.getMonth() + 1) + "月", value: (monthMap[key] || 0) / 1000 }); } }
+  const monthMax = Math.max(0.1, ...monthsArr.map((m) => m.value));
 
   const [vy, vm] = viewMonth.split("-").map(Number);
   const firstWeekday = new Date(vy, vm - 1, 1).getDay();
   const daysInMonth = new Date(vy, vm, 0).getDate();
-  const recByDate = {};
-  for (const r of records) (recByDate[r.date] = recByDate[r.date] || []).push(r);
+  const recByDate = {}; for (const r of records) (recByDate[r.date] = recByDate[r.date] || []).push(r);
   const monthSwam = swamRecords.filter((r) => r.date.startsWith(viewMonth));
   const monthDist = monthSwam.reduce((s, r) => s + r.distance, 0);
   const monthTime = monthSwam.reduce((s, r) => s + r.duration, 0);
-  function changeMonth(delta) {
-    let y = vy, m = vm + delta;
-    if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; }
-    setViewMonth(y + "-" + String(m).padStart(2, "0"));
+  function changeMonth(delta) { let y = vy, m = vm + delta; if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; } setViewMonth(y + "-" + String(m).padStart(2, "0")); }
+
+  // ===== 生成分享卡片 =====
+  async function shareCard() {
+    const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H;
+    const ctx = c.getContext("2d");
+    const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, "#a855f7"); g.addColorStop(1, "#d946ef");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "rgba(255,255,255,.10)"; ctx.beginPath(); ctx.arc(900, 180, 160, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(140, 1150, 120, 0, 7); ctx.fill();
+    ctx.textAlign = "center"; ctx.fillStyle = "#fff";
+    ctx.font = "600 40px 'PingFang SC',sans-serif"; ctx.fillText("✨ 游泳打卡小本本", W / 2, 130);
+    ctx.font = "800 60px 'PingFang SC',sans-serif"; ctx.fillText("你今天游进奥运会了吗", W / 2, 210);
+    ctx.font = "200px 'PingFang SC',sans-serif"; ctx.fillText(curBadge ? curBadge.emoji : "🏊", W / 2, 470);
+    ctx.font = "800 56px 'PingFang SC',sans-serif"; ctx.fillText(curBadge ? curBadge.name : "游泳爱好者", W / 2, 560);
+    // 白色面板
+    const px = 90, py = 640, pw = W - 180, ph = 460, r = 48;
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(px + r, py); ctx.arcTo(px + pw, py, px + pw, py + ph, r); ctx.arcTo(px + pw, py + ph, px, py + ph, r); ctx.arcTo(px, py + ph, px, py, r); ctx.arcTo(px, py, px + pw, py, r); ctx.closePath(); ctx.fill();
+    const stats = [["累计打卡", totalDays + " 天"], ["总距离", (totalDistance / 1000).toFixed(1) + " km"], ["最长连续", pbStreak + " 天"], ["平均配速", avgPace ? avgPace + "/100m" : "—"]];
+    for (let i = 0; i < 4; i++) {
+      const col = i % 2, row = Math.floor(i / 2);
+      const cx = px + pw / 4 + col * (pw / 2), cy = py + 130 + row * 200;
+      ctx.fillStyle = "#a855f7"; ctx.font = "800 64px 'PingFang SC',sans-serif"; ctx.fillText(stats[i][1], cx, cy);
+      ctx.fillStyle = "#c084fc"; ctx.font = "600 34px 'PingFang SC',sans-serif"; ctx.fillText(stats[i][0], cx, cy + 56);
+    }
+    ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.font = "600 36px 'PingFang SC',sans-serif"; ctx.fillText(todayStr() + " · 继续加油！🏊‍♀️", W / 2, 1230);
+    c.toBlob(async (blob) => {
+      const file = new File([blob], "游泳打卡卡片.png", { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: "我的游泳打卡" }); return; } catch (e) {} }
+      const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "游泳打卡卡片.png"; a.click(); URL.revokeObjectURL(url);
+    }, "image/png");
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-100 via-purple-50 to-fuchsia-100 safe-bottom">
-      <div className="max-w-md mx-auto px-4 pt-6 safe-top">
-        <div className="relative text-center mb-5">
-          <button onClick={exportCSV} className="absolute right-0 top-0 flex items-center gap-1 bg-white/70 backdrop-blur text-purple-500 text-xs font-bold px-3 py-2 rounded-full shadow-sm active:scale-95">⬇ 导出</button>
-          <div className="inline-flex items-center gap-2 bg-white/70 backdrop-blur px-4 py-1.5 rounded-full text-purple-500 text-xs font-bold shadow-sm mb-3">✨ 游泳打卡小本本</div>
-          <h1 className="text-2xl font-extrabold text-purple-700 leading-snug">你今天<br />游进奥运会了吗 🏊‍♀️</h1>
+    <div className="min-h-screen safe-bottom relative" style={{ background: "linear-gradient(180deg,#efe2ff 0%,#f6eeff 38%,#fbeef9 100%)" }}>
+      <div className="max-w-md mx-auto px-4 pt-6 safe-top relative z-10">
+        <div className="relative text-center mb-6 fade-up">
+          <button onClick={shareCard} className="absolute left-0 top-0 flex items-center gap-1 bg-white/70 backdrop-blur text-purple-500 text-xs font-bold px-3 py-2 rounded-2xl card-flat active:scale-95">📸 分享</button>
+          <button onClick={() => setShowBackup(true)} className="absolute right-0 top-0 flex items-center gap-1 bg-white/70 backdrop-blur text-purple-500 text-xs font-bold px-3 py-2 rounded-2xl card-flat active:scale-95">☁ 备份</button>
+          <div className="inline-flex items-center gap-1.5 bg-white/60 backdrop-blur px-4 py-1.5 rounded-full text-purple-500 text-xs font-bold card-flat mb-3 mt-1">✨ 游泳打卡小本本</div>
+          <h1 className="text-[26px] font-black text-purple-700 leading-tight tracking-tight">你今天<br />游进奥运会了吗 <span className="inline-block">🏊‍♀️</span></h1>
         </div>
 
-        {/* 当前勋章 + 连续打卡 */}
-        <div className="bg-white rounded-3xl p-4 mb-4 shadow-sm flex items-center gap-3">
-          <button onClick={() => setView("badge")} className={"shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center text-3xl bg-gradient-to-br " + (curBadge ? curBadge.color : "from-purple-100 to-purple-200") + " active:scale-95 transition"}>
-            {curBadge ? curBadge.emoji : "🔒"}
-          </button>
-          <div className="min-w-0">
-            <div className="text-purple-700 font-extrabold text-base truncate">
-              {curBadge ? curBadge.name : "还没有勋章"} · 🔥{streak}天
-            </div>
-            <div className="text-purple-400 text-xs font-bold mt-0.5">
-              累计签到 {totalDays} 天
-              {nextBadge ? ` · 再签 ${nextBadge.d - totalDays} 天得「${nextBadge.name}」` : " · 已集齐全部勋章！🎉"}
-            </div>
+        <div className="bg-white/90 backdrop-blur rounded-[28px] p-4 mb-4 card flex items-center gap-4 fade-up" style={{ animationDelay: ".05s" }}>
+          <button onClick={() => setView("badge")} className={"shrink-0 w-[68px] h-[68px] rounded-3xl flex items-center justify-center text-[34px] bg-gradient-to-br shadow-inner active:scale-95 transition " + (curBadge ? curBadge.color : "from-purple-100 to-purple-200")}><span className="drop-shadow-sm">{curBadge ? curBadge.emoji : "🔒"}</span></button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2"><span className="text-purple-800 font-extrabold text-base truncate">{curBadge ? curBadge.name : "还没有勋章"}</span><span className="shrink-0 inline-flex items-center gap-0.5 bg-orange-50 text-orange-500 text-[11px] font-bold px-2 py-0.5 rounded-full">🔥{streak}天</span></div>
+            <div className="text-purple-400 text-xs font-bold mt-1 leading-relaxed">累计签到 <span className="text-purple-600">{totalDays}</span> 天{nextBadge ? <><br />再签 {nextBadge.d - totalDays} 天解锁「{nextBadge.name}」</> : <><br />🎉 已集齐全部勋章！</>}</div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-500 to-fuchsia-500 rounded-3xl p-5 text-white shadow-lg mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-bold flex items-center gap-1.5">🏆 离目标还有多远</span>
-            {editingGoal ? (
-              <div className="flex items-center gap-1 bg-white/20 rounded-full pl-3 pr-1 py-1">
-                <input type="number" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} placeholder={(goal / 1000).toString()} className="w-14 bg-transparent text-white placeholder-purple-200 font-bold outline-none text-right" autoFocus />
-                <span className="text-xs text-purple-100">km</span>
-                <button onClick={() => saveGoal(goalInput || goal / 1000)} className="bg-white text-purple-600 rounded-full px-2 py-0.5 ml-1 text-xs font-bold">✓</button>
-              </div>
-            ) : (
-              <button onClick={() => { setGoalInput((goal / 1000).toString()); setEditingGoal(true); }} className="flex items-center gap-1 text-sm font-bold bg-white/20 px-3 py-1.5 rounded-full active:scale-95">目标 {(goal / 1000).toFixed(0)}km ✏️</button>
-            )}
+        <div className="rounded-[28px] p-5 text-white card mb-4 fade-up relative overflow-hidden" style={{ background: "linear-gradient(135deg,#a855f7 0%,#d946ef 100%)", animationDelay: ".1s" }}>
+          <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10"></div>
+          <div className="flex items-center justify-between mb-3 relative">
+            <span className="font-bold flex items-center gap-1.5">{gi.title}</span>
+            <button onClick={openGoal} className="flex items-center gap-1 text-sm font-bold bg-white/25 px-3 py-1.5 rounded-full active:scale-95">{gi.edit} ✏️</button>
           </div>
-          <div className="h-4 bg-white/30 rounded-full overflow-hidden mb-2"><div className="h-full bg-white rounded-full transition-all duration-700" style={{ width: progress + "%" }} /></div>
-          <p className="text-xs text-purple-100">已游 {(totalDistance / 1000).toFixed(2)} km（{progress.toFixed(1)}%）{remaining > 0 ? " · 还差 " + (remaining / 1000).toFixed(2) + " km 就达成目标啦！" : " · 🎉 目标达成！太强了！"}</p>
+          <div className="h-3.5 bg-white/25 rounded-full overflow-hidden mb-2.5 relative"><div className="h-full rounded-full transition-all duration-700 shine" style={{ width: gi.pct + "%", background: "linear-gradient(90deg,#fff,#fde68a,#fff)" }} /></div>
+          <p className="text-xs text-purple-50 relative">{gi.text}</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <Stat label="累计打卡" value={totalDays} unit="天" />
-          <Stat label="总距离" value={(totalDistance / 1000).toFixed(1)} unit="km" />
-          <Stat label="本月游了" value={thisMonthCount} unit="次" />
+        <div className="grid grid-cols-3 gap-3 mb-5 fade-up" style={{ animationDelay: ".15s" }}>
+          <Stat icon="📆" label="累计打卡" value={totalDays} unit="天" />
+          <Stat icon="🌊" label="总距离" value={(totalDistance / 1000).toFixed(1)} unit="km" />
+          <Stat icon="⚡" label="平均配速" value={avgPace || "—"} unit="百米" />
         </div>
 
-        <div className="flex bg-white/60 rounded-2xl p-1 mb-4">
-          <ViewTab active={view === "list"} onClick={() => setView("list")}>📋 列表</ViewTab>
-          <ViewTab active={view === "calendar"} onClick={() => setView("calendar")}>📅 日历</ViewTab>
-          <ViewTab active={view === "badge"} onClick={() => setView("badge")}>🏅 勋章</ViewTab>
+        <div className="flex bg-white/70 backdrop-blur rounded-2xl p-1 mb-4 card-flat fade-up" style={{ animationDelay: ".2s" }}>
+          <ViewTab active={view === "list"} onClick={() => setView("list")}>📋记录</ViewTab>
+          <ViewTab active={view === "calendar"} onClick={() => setView("calendar")}>📅日历</ViewTab>
+          <ViewTab active={view === "data"} onClick={() => setView("data")}>📊数据</ViewTab>
+          <ViewTab active={view === "badge"} onClick={() => setView("badge")}>🏅勋章</ViewTab>
         </div>
 
         {view === "list" && (records.length === 0 ? <Empty onAdd={() => setShowForm(true)} /> : (
-          <div>
-            <button onClick={() => setShowForm(true)} className="w-full mb-3 bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white font-bold py-3.5 rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-[0.98]">＋ 记录今天</button>
-            <div className="space-y-3">{records.map((r) => <RecordCard key={r.id} r={r} photo={photos[r.id]} onDel={() => del(r.id)} onPhoto={() => setLightbox(photos[r.id])} />)}</div>
+          <div className="fade-up">
+            <button onClick={() => setShowForm(true)} className="w-full mb-3 text-white font-bold py-3.5 rounded-2xl card active:scale-[0.98] flex items-center justify-center gap-2" style={{ background: "linear-gradient(90deg,#a855f7,#d946ef)" }}>＋ 记录今天</button>
+            <div className="space-y-3">{records.map((r) => <RecordCard key={r.id} r={r} photo={photos[r.id]} isPbDist={r.distance > 0 && r.distance === pbDist} onDel={() => del(r.id)} onPhoto={() => setLightbox(photos[r.id])} />)}</div>
           </div>
         ))}
 
         {view === "calendar" && (
-          <div>
-            <div className="bg-white rounded-3xl p-4 shadow-sm mb-4">
-              <div className="flex items-center justify-between mb-3">
-                <button onClick={() => changeMonth(-1)} className="text-purple-400 px-3 py-1 text-2xl leading-none active:scale-90">‹</button>
-                <div className="font-extrabold text-purple-700">{vy} 年 {vm} 月</div>
-                <button onClick={() => changeMonth(1)} className="text-purple-400 px-3 py-1 text-2xl leading-none active:scale-90">›</button>
-              </div>
+          <div className="fade-up">
+            <div className="bg-white/90 backdrop-blur rounded-[28px] p-4 card mb-4">
+              <div className="flex items-center justify-between mb-3"><button onClick={() => changeMonth(-1)} className="text-purple-400 w-9 h-9 rounded-full hover:bg-purple-50 text-2xl leading-none active:scale-90">‹</button><div className="font-extrabold text-purple-700 text-lg">{vy} 年 {vm} 月</div><button onClick={() => changeMonth(1)} className="text-purple-400 w-9 h-9 rounded-full hover:bg-purple-50 text-2xl leading-none active:scale-90">›</button></div>
               <div className="grid grid-cols-7 gap-1 mb-1">{WEEKDAYS.map((w) => <div key={w} className="text-center text-[11px] font-bold text-purple-300 py-1">{w}</div>)}</div>
-              <div className="grid grid-cols-7 gap-1">
+              <div className="grid grid-cols-7 gap-1.5">
                 {Array.from({ length: firstWeekday }).map((_, i) => <div key={"b" + i} />)}
-                {Array.from({ length: daysInMonth }).map((_, i) => {
-                  const day = i + 1;
-                  const ds = viewMonth + "-" + String(day).padStart(2, "0");
-                  const recs = recByDate[ds] || [];
-                  const swamRec = recs.find((r) => r.swam);
-                  const isToday = ds === todayStr();
-                  return (
-                    <button key={day} onClick={() => recs.length && setDayDetail({ date: ds, recs })}
-                      className={"aspect-square rounded-xl flex flex-col items-center justify-center transition " + (swamRec ? "bg-purple-500 text-white font-bold" : recs.length ? "bg-purple-100 text-purple-400" : "text-purple-300") + (isToday ? " ring-2 ring-fuchsia-400" : "")}>
-                      <span className="text-[10px] leading-none">{day}</span>
-                      {swamRec && <span className="text-sm leading-tight">{swamRec.mood && swamRec.mood.emoji}</span>}
-                      {!swamRec && recs.length > 0 && <span className="text-[10px] leading-tight">🛋️</span>}
-                    </button>
-                  );
-                })}
+                {Array.from({ length: daysInMonth }).map((_, i) => { const day = i + 1; const ds = viewMonth + "-" + String(day).padStart(2, "0"); const recs = recByDate[ds] || []; const swamRec = recs.find((r) => r.swam); const isToday = ds === todayStr(); return (<button key={day} onClick={() => recs.length && setDayDetail({ date: ds, recs })} className={"aspect-square rounded-2xl flex flex-col items-center justify-center transition active:scale-90 " + (swamRec ? "text-white font-bold shadow-sm" : recs.length ? "bg-purple-100 text-purple-400" : "text-purple-300") + (isToday ? " ring-2 ring-fuchsia-400 ring-offset-1" : "")} style={swamRec ? { background: "linear-gradient(135deg,#a855f7,#d946ef)" } : {}}><span className="text-[10px] leading-none opacity-80">{day}</span>{swamRec && <span className="text-sm leading-tight">{swamRec.mood && swamRec.mood.emoji}</span>}{!swamRec && recs.length > 0 && <span className="text-[10px] leading-tight">🛋️</span>}</button>); })}
               </div>
             </div>
-            <div className="bg-gradient-to-br from-fuchsia-400 to-purple-500 rounded-3xl p-4 text-white shadow-md">
-              <div className="font-bold text-sm mb-2">📅 {vm} 月小结</div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <MonthStat value={monthSwam.length} unit="次" label="游泳" />
-                <MonthStat value={(monthDist / 1000).toFixed(1)} unit="km" label="距离" />
-                <MonthStat value={monthTime} unit="分钟" label="时长" />
-              </div>
-            </div>
+            <div className="rounded-[28px] p-4 text-white card" style={{ background: "linear-gradient(135deg,#d946ef,#a855f7)" }}><div className="font-bold text-sm mb-2">📅 {vm} 月小结</div><div className="grid grid-cols-3 gap-2 text-center"><MonthStat value={monthSwam.length} unit="次" label="游泳" /><MonthStat value={(monthDist / 1000).toFixed(1)} unit="km" label="距离" /><MonthStat value={monthTime} unit="分钟" label="时长" /></div></div>
           </div>
         )}
 
-        {view === "badge" && (
-          <div>
-            {/* 当前进度 */}
-            <div className="bg-white rounded-3xl p-5 shadow-sm mb-4 text-center">
-              <div className={"mx-auto w-24 h-24 rounded-3xl flex items-center justify-center text-5xl mb-3 bg-gradient-to-br " + (curBadge ? curBadge.color : "from-purple-100 to-purple-200")}>
-                {curBadge ? curBadge.emoji : "🔒"}
+        {view === "data" && (
+          swamRecords.length === 0 ? (
+            <div className="text-center text-purple-400 bg-white/70 backdrop-blur rounded-[28px] py-12 px-4 card-flat fade-up"><div className="text-4xl mb-2">📊</div><p className="font-extrabold text-purple-500">还没有数据哦～</p><p className="text-sm mt-1">记录几次游泳后，这里会出现你的进步图表！</p></div>
+          ) : (
+          <div className="fade-up space-y-4">
+            <div className="bg-white/90 backdrop-blur rounded-[28px] p-4 card">
+              <div className="font-extrabold text-purple-700 mb-3 text-sm">🏆 个人最佳</div>
+              <div className="grid grid-cols-2 gap-3">
+                <PB icon="🌊" label="最长距离" value={pbDist > 0 ? pbDist + " m" : "—"} />
+                <PB icon="⚡" label="最快配速" value={pbPace || "—"} />
+                <PB icon="⏱️" label="最长时间" value={pbTime > 0 ? pbTime + " 分" : "—"} />
+                <PB icon="🔥" label="最长连续" value={pbStreak + " 天"} />
               </div>
-              <div className="text-purple-700 font-extrabold text-lg">{curBadge ? curBadge.name : "还没有勋章哦"}</div>
-              <div className="text-purple-400 text-sm font-bold mt-1">累计签到 {totalDays} 天</div>
-              {nextBadge && (
-                <div className="mt-3">
-                  <div className="h-3 bg-purple-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-purple-500 to-fuchsia-500 rounded-full transition-all duration-700"
-                      style={{ width: Math.min(100, (totalDays / nextBadge.d) * 100) + "%" }} />
-                  </div>
-                  <div className="text-xs text-purple-500 font-bold mt-2">再签到 {nextBadge.d - totalDays} 天，解锁「{nextBadge.emoji} {nextBadge.name}」</div>
-                </div>
-              )}
-              {!nextBadge && curBadge && <div className="text-xs text-fuchsia-500 font-bold mt-3">🎉 太厉害啦，全部勋章已集齐！</div>}
             </div>
 
-            {/* 全部勋章墙 */}
-            <div className="bg-white rounded-3xl p-4 shadow-sm">
-              <div className="font-extrabold text-purple-700 mb-3 text-sm">🏅 勋章墙</div>
-              <div className="grid grid-cols-3 gap-3">
-                {BADGES.map((b) => {
-                  const unlocked = totalDays >= b.d;
-                  return (
-                    <div key={b.d} className={"rounded-2xl p-3 flex flex-col items-center text-center " + (unlocked ? "bg-purple-50" : "bg-gray-50")}>
-                      <div className={"w-12 h-12 rounded-2xl flex items-center justify-center text-2xl mb-1.5 bg-gradient-to-br " + (unlocked ? b.color : "from-gray-200 to-gray-300")}>
-                        <span className={unlocked ? "" : "grayscale opacity-40"}>{unlocked ? b.emoji : "🔒"}</span>
-                      </div>
-                      <div className={"text-[11px] font-bold leading-tight " + (unlocked ? "text-purple-700" : "text-gray-400")}>{b.name}</div>
-                      <div className={"text-[10px] font-bold mt-0.5 " + (unlocked ? "text-fuchsia-500" : "text-gray-400")}>{unlocked ? "已获得" : b.d + "天"}</div>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="bg-white/90 backdrop-blur rounded-[28px] p-4 card">
+              <div className="font-extrabold text-purple-700 mb-1 text-sm">🌊 近期每次距离</div>
+              <div className="text-[11px] text-purple-400 font-bold mb-3">最近 {recentSessions.length} 次（米）</div>
+              <div className="flex items-end gap-1.5 h-36">{recentSessions.map((r, i) => (<div key={i} className="flex-1 flex flex-col items-center justify-end h-full"><span className="text-[9px] text-purple-500 font-bold mb-1">{r.distance}</span><div className="w-full rounded-t-lg bar-grow" style={{ height: Math.max(4, (r.distance / recentMax) * 100) + "%", background: "linear-gradient(180deg,#d946ef,#a855f7)" }} /><span className="text-[8px] text-purple-300 mt-1">{r.date.slice(5)}</span></div>))}</div>
             </div>
+
+            <div className="bg-white/90 backdrop-blur rounded-[28px] p-4 card">
+              <div className="font-extrabold text-purple-700 mb-3 text-sm">📈 近 6 个月距离（km）</div>
+              <div className="flex items-end gap-2 h-32">{monthsArr.map((m, i) => (<div key={i} className="flex-1 flex flex-col items-center justify-end h-full"><span className="text-[9px] text-purple-500 font-bold mb-1">{m.value > 0 ? m.value.toFixed(1) : ""}</span><div className="w-full rounded-t-lg bar-grow" style={{ height: Math.max(3, (m.value / monthMax) * 100) + "%", background: m.value > 0 ? "linear-gradient(180deg,#a855f7,#c084fc)" : "#ede9fe" }} /><span className="text-[9px] text-purple-300 mt-1">{m.label}</span></div>))}</div>
+            </div>
+
+            <div className="bg-white/90 backdrop-blur rounded-[28px] p-4 card">
+              <div className="font-extrabold text-purple-700 mb-3 text-sm">🏊 泳姿统计</div>
+              {strokeList.length === 0 ? (<p className="text-xs text-purple-400 font-bold py-2">还没记录泳姿，下次记录时选一个吧～</p>) : (<div className="space-y-2.5">{strokeList.map((s) => (<div key={s.name}><div className="flex justify-between text-xs font-bold text-purple-600 mb-1"><span>{s.name}</span><span>{s.count} 次</span></div><div className="h-3 bg-purple-50 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: (s.count / strokeMax) * 100 + "%", background: "linear-gradient(90deg,#a855f7,#d946ef)" }} /></div></div>))}</div>)}
+            </div>
+
+            <button onClick={shareCard} className="w-full text-white font-bold py-3.5 rounded-2xl card active:scale-[0.98] flex items-center justify-center gap-2" style={{ background: "linear-gradient(90deg,#a855f7,#d946ef)" }}>📸 生成打卡卡片分享</button>
+          </div>
+          )
+        )}
+
+        {view === "badge" && (
+          <div className="fade-up">
+            <div className="bg-white/90 backdrop-blur rounded-[28px] p-6 card mb-4 text-center">
+              <div className={"mx-auto w-28 h-28 rounded-[32px] flex items-center justify-center text-6xl mb-3 bg-gradient-to-br pop shadow-inner " + (curBadge ? curBadge.color : "from-purple-100 to-purple-200")}><span className="drop-shadow">{curBadge ? curBadge.emoji : "🔒"}</span></div>
+              <div className="text-purple-800 font-black text-xl">{curBadge ? curBadge.name : "还没有勋章哦"}</div>
+              <div className="text-purple-400 text-sm font-bold mt-1">累计签到 {totalDays} 天</div>
+              {nextBadge && (<div className="mt-4"><div className="h-3 bg-purple-100 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all duration-700" style={{ width: Math.min(100, (totalDays / nextBadge.d) * 100) + "%", background: "linear-gradient(90deg,#a855f7,#d946ef)" }} /></div><div className="text-xs text-purple-500 font-bold mt-2">再签到 {nextBadge.d - totalDays} 天，解锁「{nextBadge.emoji} {nextBadge.name}」</div></div>)}
+              {!nextBadge && curBadge && <div className="text-xs text-fuchsia-500 font-bold mt-4">🎉 太厉害啦，全部勋章已集齐！</div>}
+            </div>
+            <div className="bg-white/90 backdrop-blur rounded-[28px] p-4 card"><div className="font-extrabold text-purple-700 mb-3 text-sm">🏅 勋章墙</div><div className="grid grid-cols-3 gap-3">{BADGES.map((b) => { const u = totalDays >= b.d; return (<div key={b.d} className={"rounded-3xl p-3 flex flex-col items-center text-center transition " + (u ? "bg-gradient-to-b from-purple-50 to-fuchsia-50" : "bg-gray-50")}><div className={"w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mb-1.5 bg-gradient-to-br " + (u ? b.color + " shadow-sm" : "from-gray-200 to-gray-300")}><span className={u ? "drop-shadow-sm" : "grayscale opacity-40"}>{u ? b.emoji : "🔒"}</span></div><div className={"text-[11px] font-bold leading-tight " + (u ? "text-purple-700" : "text-gray-400")}>{b.name}</div><div className={"text-[10px] font-bold mt-0.5 " + (u ? "text-fuchsia-500" : "text-gray-400")}>{u ? "已获得" : b.d + "天"}</div></div>); })}</div></div>
           </div>
         )}
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-purple-900/30 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 max-h-[92vh] overflow-y-auto safe-bottom">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-extrabold text-purple-700">记录今天 🏊</h2>
-              <button onClick={() => { setShowForm(false); resetForm(); }} className="text-purple-300 text-3xl leading-none px-2 active:scale-90">×</button>
-            </div>
-            <Field label="日期"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none" /></Field>
+        <div className="fixed inset-0 bg-purple-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50" style={{ animation: "fadeUp .25s ease" }}>
+          <div className="bg-white w-full max-w-md rounded-t-[32px] sm:rounded-[32px] p-5 max-h-[92vh] overflow-y-auto safe-bottom">
+            <div className="w-10 h-1 bg-purple-200 rounded-full mx-auto mb-4 sm:hidden"></div>
+            <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-black text-purple-700">记录今天 🏊</h2><button onClick={() => { setShowForm(false); resetForm(); }} className="text-purple-300 w-9 h-9 rounded-full hover:bg-purple-50 text-3xl leading-none active:scale-90">×</button></div>
+            <Field label="日期"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none focus:ring-2 ring-purple-200" /></Field>
             <Field label="今天游了吗？"><div className="grid grid-cols-2 gap-3"><Toggle active={swam} onClick={() => setSwam(true)}>🏊 游了！</Toggle><Toggle active={!swam} onClick={() => setSwam(false)}>🛋️ 没游</Toggle></div></Field>
             {swam && (<>
-              <Field label="今天的心情"><div className="flex flex-wrap gap-2">{MOODS.map((m) => <button key={m.label} onClick={() => setMood(m)} className={"flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition " + (mood.label === m.label ? "bg-purple-500 text-white scale-105" : "bg-purple-50 text-purple-500")}><span className="text-xl">{m.emoji}</span><span className="text-[10px] font-bold">{m.label}</span></button>)}</div></Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="距离 (米)"><input type="number" value={distance} onChange={(e) => setDistance(e.target.value)} placeholder="0" className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none" /></Field>
-                <Field label="时间 (分钟)"><input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="0" className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none" /></Field>
-              </div>
-              <Field label="游泳馆"><input type="text" value={pool} onChange={(e) => setPool(e.target.value)} placeholder="比如：市体育中心游泳馆" className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none" /></Field>
+              <Field label="今天的心情"><div className="flex flex-wrap gap-2">{MOODS.map((m) => <button key={m.label} onClick={() => setMood(m)} className={"flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition " + (mood.label === m.label ? "text-white scale-105 shadow-sm" : "bg-purple-50 text-purple-500")} style={mood.label === m.label ? { background: "linear-gradient(135deg,#a855f7,#d946ef)" } : {}}><span className="text-xl">{m.emoji}</span><span className="text-[10px] font-bold">{m.label}</span></button>)}</div></Field>
+              <Field label="泳姿"><div className="flex flex-wrap gap-2">{STROKES.map((s) => <button key={s} onClick={() => setStroke(s)} className={"px-4 py-2 rounded-2xl text-sm font-bold transition " + (stroke === s ? "text-white scale-105 shadow-sm" : "bg-purple-50 text-purple-500")} style={stroke === s ? { background: "linear-gradient(135deg,#a855f7,#d946ef)" } : {}}>{s}</button>)}</div></Field>
+              <div className="grid grid-cols-2 gap-3"><Field label="距离 (米)"><input type="number" value={distance} onChange={(e) => setDistance(e.target.value)} placeholder="0" className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none focus:ring-2 ring-purple-200" /></Field><Field label="时间 (分钟)"><input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="0" className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none focus:ring-2 ring-purple-200" /></Field></div>
+              {paceStr(Number(distance), Number(duration)) && <div className="-mt-2 mb-4 text-xs font-bold text-fuchsia-500 bg-fuchsia-50 rounded-xl px-3 py-2">⚡ 配速：{paceStr(Number(distance), Number(duration))} / 100m</div>}
+              <Field label="游泳馆"><input type="text" value={pool} onChange={(e) => setPool(e.target.value)} placeholder="比如：市体育中心游泳馆" className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none focus:ring-2 ring-purple-200" /></Field>
             </>)}
-            <Field label="备注"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={swam ? "今天练了什么泳姿？教练说了啥？" : "今天为什么没游呀～"} className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none resize-none" /></Field>
-            <Field label="照片">
-              <input ref={fileRef} type="file" accept="image/*" onChange={onPickPhoto} className="hidden" />
-              {photo ? (
-                <div className="relative"><img src={photo} alt="预览" className="w-full h-40 object-cover rounded-2xl" /><button onClick={() => { setPhoto(null); if (fileRef.current) fileRef.current.value = ""; }} className="absolute top-2 right-2 bg-purple-900/50 text-white rounded-full w-8 h-8">×</button></div>
-              ) : (
-                <button onClick={() => fileRef.current && fileRef.current.click()} className="w-full border-2 border-dashed border-purple-200 rounded-2xl py-6 flex flex-col items-center gap-1 text-purple-400 active:scale-[0.98]"><span className="text-2xl">🖼️</span><span className="text-xs font-bold">点击添加照片</span></button>
-              )}
+            <Field label="备注"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={swam ? "今天练了什么泳姿？教练说了啥？" : "今天为什么没游呀～"} className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none focus:ring-2 ring-purple-200 resize-none" /></Field>
+            <Field label="照片"><input ref={fileRef} type="file" accept="image/*" onChange={onPickPhoto} className="hidden" />{photo ? (<div className="relative"><img src={photo} alt="预览" className="w-full h-40 object-cover rounded-2xl" /><button onClick={() => { setPhoto(null); if (fileRef.current) fileRef.current.value = ""; }} className="absolute top-2 right-2 bg-purple-900/50 text-white rounded-full w-8 h-8">×</button></div>) : (<button onClick={() => fileRef.current && fileRef.current.click()} className="w-full border-2 border-dashed border-purple-200 rounded-2xl py-6 flex flex-col items-center gap-1 text-purple-400 active:scale-[0.98]"><span className="text-2xl">🖼️</span><span className="text-xs font-bold">点击添加照片</span></button>)}</Field>
+            <button onClick={addRecord} className="w-full mt-1 text-white font-bold py-3.5 rounded-2xl card active:scale-[0.98]" style={{ background: "linear-gradient(90deg,#a855f7,#d946ef)" }}>保存记录 ✨</button>
+          </div>
+        </div>
+      )}
+
+      {showGoal && (
+        <div className="fixed inset-0 bg-purple-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50" onClick={() => setShowGoal(false)}>
+          <div className="bg-white w-full max-w-md rounded-t-[32px] sm:rounded-[32px] p-5 safe-bottom" onClick={(e) => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-purple-200 rounded-full mx-auto mb-4 sm:hidden"></div>
+            <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-black text-purple-700">设定目标 🎯</h2><button onClick={() => setShowGoal(false)} className="text-purple-300 w-9 h-9 rounded-full hover:bg-purple-50 text-3xl leading-none active:scale-90">×</button></div>
+            <Field label="目标类型">
+              <div className="grid grid-cols-3 gap-2">
+                <GoalType active={goalType === "distance"} onClick={() => setGoalType("distance")}>🌊 总距离</GoalType>
+                <GoalType active={goalType === "count"} onClick={() => setGoalType("count")}>🏊 游泳次数</GoalType>
+                <GoalType active={goalType === "days"} onClick={() => setGoalType("days")}>🔥 连续天数</GoalType>
+              </div>
             </Field>
-            <button onClick={addRecord} className="w-full mt-1 bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white font-bold py-3.5 rounded-2xl shadow-lg active:scale-[0.98]">保存记录 ✨</button>
+            <Field label={goalType === "distance" ? "目标距离 (km)" : goalType === "count" ? "目标次数 (次)" : "连续天数 (天)"}>
+              <input type="number" value={goalVal} onChange={(e) => setGoalVal(e.target.value)} placeholder={goalType === "distance" ? "比如 100" : goalType === "count" ? "比如 50" : "比如 30"} className="w-full bg-purple-50 rounded-2xl px-4 py-3 text-purple-700 outline-none focus:ring-2 ring-purple-200" autoFocus />
+            </Field>
+            <div className="bg-purple-50 rounded-2xl p-3 text-xs text-purple-500 font-medium mb-4">💡 {goalType === "distance" ? "累计游够这么多公里" : goalType === "count" ? "累计游泳达到这么多次" : "连续每天打卡达到这么多天"}就算达成目标～</div>
+            <button onClick={saveGoal} className="w-full text-white font-bold py-3.5 rounded-2xl card active:scale-[0.98]" style={{ background: "linear-gradient(90deg,#a855f7,#d946ef)" }}>保存目标 ✨</button>
           </div>
         </div>
       )}
 
       {dayDetail && (
-        <div className="fixed inset-0 bg-purple-900/30 backdrop-blur-sm flex items-end sm:items-center justify-center z-50" onClick={() => setDayDetail(null)}>
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 max-h-[80vh] overflow-y-auto safe-bottom" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-extrabold text-purple-700">📅 {dayDetail.date}</h2><button onClick={() => setDayDetail(null)} className="text-purple-300 text-3xl leading-none px-2 active:scale-90">×</button></div>
-            <div className="space-y-3">{dayDetail.recs.map((r) => <RecordCard key={r.id} r={r} photo={photos[r.id]} hideDate onDel={() => del(r.id)} onPhoto={() => setLightbox(photos[r.id])} />)}</div>
+        <div className="fixed inset-0 bg-purple-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50" onClick={() => setDayDetail(null)}>
+          <div className="bg-white w-full max-w-md rounded-t-[32px] sm:rounded-[32px] p-5 max-h-[80vh] overflow-y-auto safe-bottom" onClick={(e) => e.stopPropagation()}><div className="w-10 h-1 bg-purple-200 rounded-full mx-auto mb-4 sm:hidden"></div><div className="flex items-center justify-between mb-4"><h2 className="text-lg font-black text-purple-700">📅 {dayDetail.date}</h2><button onClick={() => setDayDetail(null)} className="text-purple-300 w-9 h-9 rounded-full hover:bg-purple-50 text-3xl leading-none active:scale-90">×</button></div><div className="space-y-3">{dayDetail.recs.map((r) => <RecordCard key={r.id} r={r} photo={photos[r.id]} hideDate onDel={() => del(r.id)} onPhoto={() => setLightbox(photos[r.id])} />)}</div></div>
+        </div>
+      )}
+
+      {lightbox && <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-[60] p-4" onClick={() => setLightbox(null)}><img src={lightbox} alt="" className="max-w-full max-h-full rounded-2xl" /></div>}
+
+      {celebrate && (
+        <div className="fixed inset-0 bg-purple-900/50 backdrop-blur-sm flex items-center justify-center z-[70] p-6" onClick={() => setCelebrate(null)}>
+          <div className="bg-white rounded-[32px] p-8 text-center max-w-xs w-full pop" onClick={(e) => e.stopPropagation()}>
+            <div className="text-6xl mb-3">{celebrate.icon}</div>
+            <div className="text-2xl font-black text-purple-700">{celebrate.title}</div>
+            <div className="text-purple-500 font-bold mt-2">{celebrate.desc}</div>
+            <button onClick={() => setCelebrate(null)} className="mt-5 w-full text-white font-bold py-3 rounded-2xl card active:scale-[0.98]" style={{ background: "linear-gradient(90deg,#a855f7,#d946ef)" }}>太棒了 🎉</button>
           </div>
         </div>
       )}
 
-      {lightbox && <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4" onClick={() => setLightbox(null)}><img src={lightbox} alt="" className="max-w-full max-h-full rounded-2xl" /></div>}
+      {showBackup && (
+        <div className="fixed inset-0 bg-purple-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50" onClick={() => setShowBackup(false)}>
+          <div className="bg-white w-full max-w-md rounded-t-[32px] sm:rounded-[32px] p-5 safe-bottom" onClick={(e) => e.stopPropagation()}><div className="w-10 h-1 bg-purple-200 rounded-full mx-auto mb-4 sm:hidden"></div><div className="flex items-center justify-between mb-4"><h2 className="text-xl font-black text-purple-700">备份与恢复 ☁️</h2><button onClick={() => setShowBackup(false)} className="text-purple-300 w-9 h-9 rounded-full hover:bg-purple-50 text-3xl leading-none active:scale-90">×</button></div><div className="bg-purple-50 rounded-2xl p-3 text-xs text-purple-500 font-medium mb-4 leading-relaxed">💡 备份文件包含<b>全部记录、照片和目标</b>，换手机时把它导入即可完整还原。建议定期备份，存到微信/网盘/邮箱里更安心。</div><input ref={importRef} type="file" accept="application/json,.json" onChange={importBackup} className="hidden" /><button onClick={exportBackup} className="w-full mb-3 text-white font-bold py-3.5 rounded-2xl card active:scale-[0.98] flex items-center justify-center gap-2" style={{ background: "linear-gradient(90deg,#a855f7,#d946ef)" }}>📦 导出完整备份（含照片）</button><button onClick={() => importRef.current && importRef.current.click()} className="w-full mb-3 bg-purple-100 text-purple-600 font-bold py-3.5 rounded-2xl active:scale-[0.98] flex items-center justify-center gap-2">📥 从备份文件恢复</button><button onClick={exportCSV} className="w-full bg-purple-50 text-purple-400 font-bold py-3 rounded-2xl active:scale-[0.98] flex items-center justify-center gap-2 text-sm">📊 导出 CSV 表格（用于 Excel 查看）</button></div>
+        </div>
+      )}
     </div>
   );
 }
 
-function RecordCard({ r, photo, onDel, onPhoto, hideDate }) {
+function RecordCard({ r, photo, onDel, onPhoto, hideDate, isPbDist }) {
+  const pace = r.swam ? paceStr(r.distance, r.duration) : null;
   return (
-    <div className="bg-white rounded-3xl p-4 shadow-sm relative">
+    <div className="bg-white/95 backdrop-blur rounded-[24px] p-4 card-flat relative">
       <button onClick={onDel} className="absolute top-3 right-3 text-purple-200 text-lg active:scale-90">🗑️</button>
-      {!hideDate && <div className="flex items-center gap-2 text-purple-400 text-xs font-bold mb-2">📅 {r.date}</div>}
+      {!hideDate && <div className="flex items-center gap-1.5 text-purple-400 text-xs font-bold mb-2">📅 {r.date}{isPbDist && <span className="bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">🏆 最长距离</span>}</div>}
       {r.swam ? (<>
-        <div className="flex items-center gap-2 mb-2"><span className="text-2xl">{r.mood && r.mood.emoji}</span><span className="bg-purple-100 text-purple-600 text-xs font-bold px-2.5 py-1 rounded-full">游了！{r.mood && r.mood.label}</span></div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-purple-700">{r.distance > 0 && <span>🏊 {r.distance} m</span>}{r.duration > 0 && <span>⏱️ {r.duration} 分钟</span>}{r.pool && <span>📍 {r.pool}</span>}</div>
-      </>) : (
-        <div className="flex items-center gap-2"><span className="text-2xl">🛋️</span><span className="bg-purple-50 text-purple-400 text-xs font-bold px-2.5 py-1 rounded-full">今天没游 · 休息一下也不错～</span></div>
-      )}
-      {r.note && <div className="mt-2 text-sm text-purple-500 bg-purple-50 rounded-2xl px-3 py-2">📔 {r.note}</div>}
-      {photo && <img src={photo} alt="游泳照片" onClick={onPhoto} className="mt-2 w-full h-44 object-cover rounded-2xl cursor-pointer" />}
+        <div className="flex items-center gap-2 mb-2 flex-wrap"><span className="text-2xl">{r.mood && r.mood.emoji}</span><span className="bg-purple-100 text-purple-600 text-xs font-bold px-2.5 py-1 rounded-full">游了！{r.mood && r.mood.label}</span>{r.stroke && <span className="bg-fuchsia-100 text-fuchsia-600 text-xs font-bold px-2.5 py-1 rounded-full">{r.stroke}</span>}</div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-purple-700 font-medium">{r.distance > 0 && <span>🏊 {r.distance} m</span>}{r.duration > 0 && <span>⏱️ {r.duration} 分钟</span>}{pace && <span>⚡ {pace}/100m</span>}{r.pool && <span>📍 {r.pool}</span>}</div>
+      </>) : (<div className="flex items-center gap-2"><span className="text-2xl">🛋️</span><span className="bg-purple-50 text-purple-400 text-xs font-bold px-2.5 py-1 rounded-full">今天没游 · 休息一下也不错～</span></div>)}
+      {r.note && <div className="mt-2 text-sm text-purple-500 bg-purple-50/70 rounded-2xl px-3 py-2">📔 {r.note}</div>}
+      {photo && <img src={photo} alt="游泳照片" onClick={onPhoto} className="mt-2 w-full h-44 object-cover rounded-2xl cursor-pointer active:opacity-90" />}
     </div>
   );
 }
-function Empty({ onAdd }) { return <div className="text-center text-purple-400 bg-white/60 rounded-3xl py-12 px-4"><div className="text-3xl mb-2">🌊</div><p className="font-bold">还没有记录哦～</p><p className="text-sm mt-1 mb-4">点击下面的按钮，记录今天的游泳吧！</p><button onClick={onAdd} className="bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white font-bold px-7 py-3.5 rounded-full shadow-lg inline-flex items-center gap-2 active:scale-95">＋ 记录今天</button></div>; }
-function Stat({ label, value, unit }) { return <div className="bg-white rounded-2xl py-3 px-2 text-center shadow-sm"><div className="text-xl font-extrabold text-purple-600">{value}</div><div className="text-[11px] text-purple-400 font-bold mt-0.5">{label} ({unit})</div></div>; }
-function MonthStat({ value, unit, label }) { return <div><div className="text-lg font-extrabold">{value}</div><div className="text-[11px] text-purple-100 font-bold">{label} ({unit})</div></div>; }
-function ViewTab({ active, onClick, children }) { return <button onClick={onClick} className={"flex-1 py-2.5 rounded-xl text-sm font-bold transition " + (active ? "bg-white text-purple-600 shadow-sm" : "text-purple-400")}>{children}</button>; }
+function Empty({ onAdd }) { return <div className="text-center text-purple-400 bg-white/70 backdrop-blur rounded-[28px] py-12 px-4 card-flat fade-up"><div className="text-4xl mb-2">🌊</div><p className="font-extrabold text-purple-500">还没有记录哦～</p><p className="text-sm mt-1 mb-4">点击下面的按钮，记录今天的游泳吧！</p><button onClick={onAdd} className="text-white font-bold px-7 py-3.5 rounded-full card active:scale-95 inline-flex items-center gap-2" style={{ background: "linear-gradient(90deg,#a855f7,#d946ef)" }}>＋ 记录今天</button></div>; }
+function Stat({ icon, label, value, unit }) { return <div className="bg-white/90 backdrop-blur rounded-3xl py-3 px-2 text-center card-flat"><div className="text-base mb-0.5">{icon}</div><div className="text-lg font-black text-purple-600 leading-none">{value}</div><div className="text-[11px] text-purple-400 font-bold mt-1">{label}({unit})</div></div>; }
+function PB({ icon, label, value }) { return <div className="bg-gradient-to-b from-purple-50 to-fuchsia-50 rounded-2xl py-3 px-2 text-center"><div className="text-base mb-0.5">{icon}</div><div className="text-base font-black text-purple-600 leading-none">{value}</div><div className="text-[11px] text-purple-400 font-bold mt-1">{label}</div></div>; }
+function MonthStat({ value, unit, label }) { return <div><div className="text-lg font-black">{value}</div><div className="text-[11px] text-purple-100 font-bold">{label}({unit})</div></div>; }
+function ViewTab({ active, onClick, children }) { return <button onClick={onClick} className={"flex-1 py-2.5 rounded-xl text-[13px] font-bold transition active:scale-95 " + (active ? "bg-white text-purple-600 shadow-sm" : "text-purple-400")}>{children}</button>; }
+function GoalType({ active, onClick, children }) { return <button onClick={onClick} className={"py-2.5 rounded-2xl text-xs font-bold transition " + (active ? "text-white shadow-sm" : "bg-purple-50 text-purple-500")} style={active ? { background: "linear-gradient(135deg,#a855f7,#d946ef)" } : {}}>{children}</button>; }
 function Field({ label, children }) { return <div className="mb-4"><label className="block text-sm font-bold text-purple-600 mb-1.5">{label}</label>{children}</div>; }
-function Toggle({ active, onClick, children }) { return <button onClick={onClick} className={"py-3 rounded-2xl font-bold transition " + (active ? "bg-purple-500 text-white scale-[1.02]" : "bg-purple-50 text-purple-400")}>{children}</button>; }
+function Toggle({ active, onClick, children }) { return <button onClick={onClick} className={"py-3 rounded-2xl font-bold transition " + (active ? "text-white scale-[1.02] shadow-sm" : "bg-purple-50 text-purple-400")} style={active ? { background: "linear-gradient(135deg,#a855f7,#d946ef)" } : {}}>{children}</button>; }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
