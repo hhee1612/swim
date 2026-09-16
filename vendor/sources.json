@@ -1,0 +1,18 @@
+[
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js",
+    "name": "vendor/react-18.2.0.production.min.js",
+    "sha256": "4b4969fa4ef3594324da2c6d78ce8766fbbc2fd121fff395aedf997db0a99a06"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js",
+    "name": "vendor/react-dom-18.2.0.production.min.js",
+    "sha256": "21758ed084cd0e37e735722ee4f3957ea960628a29dfa6c3ce1a1d47a2d6e4f7"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js",
+    "name": "vendor/build/babel-standalone-7.23.2.min.js.gz",
+    "sha256": "7bcd2533d8908a1545817804bcb78aeaf9bd6771694bc0f62cc44bfce4f135b2",
+    "compression": "gzip"
+  }
+]

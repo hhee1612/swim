@@ -39,9 +39,53 @@
     if (value <= 0 || (raw.type !== "distance" && !Number.isSafeInteger(value))) fail("目标须大于 0，次数和天数须为整数");
     return { type: raw.type, value };
   }
+  function normalizePeriodGoals(raw) {
+    if (raw === undefined) return [];
+    if (!Array.isArray(raw)) fail("周期目标须为列表");
+    const ids = new Set();
+    const normalized = raw.map((goal) => {
+      if (!isObject(goal) || !validId(goal.id) || ids.has(String(goal.id))) fail("周期目标编号无效或重复");
+      ids.add(String(goal.id));
+      if (!["week", "month"].includes(goal.period) || !["count", "distance"].includes(goal.type)) fail("周期目标类型不正确");
+      const value = number(goal.value, "周期目标");
+      if (value <= 0 || (goal.type === "count" && !Number.isSafeInteger(value))) fail("周期目标须大于 0，次数须为整数");
+      const endDate = goal.endDate === undefined ? null : goal.endDate;
+      if (!validDate(goal.startDate) || (endDate !== null && (!validDate(endDate) || endDate < goal.startDate))) fail("周期目标有效日期不正确");
+      return { id: goal.id, period: goal.period, type: goal.type, value, startDate: goal.startDate, endDate };
+    });
+    for (const period of ["week", "month"]) {
+      const goals = normalized.filter((goal) => goal.period === period).sort((a, b) => a.startDate.localeCompare(b.startDate));
+      for (let index = 1; index < goals.length; index++) {
+        const previous = goals[index - 1];
+        if (previous.endDate === null || previous.endDate >= goals[index].startDate) fail("同一周期的目标有效日期不能重叠");
+      }
+    }
+    return normalized;
+  }
+  function normalizeMeta(raw) {
+    if (raw === undefined) return { lastBackupAt: null, backedUpRecordIds: [], lastBackupFingerprint: null };
+    if (!isObject(raw)) fail("备份状态格式不正确");
+    const at = raw.lastBackupAt === undefined ? null : raw.lastBackupAt;
+    if (at !== null && (typeof at !== "string" || !validDate(at.slice(0, 10)) || !/^\d{4}-\d{2}-\d{2}T/.test(at) || !Number.isFinite(Date.parse(at)))) fail("最近备份时间不正确");
+    const ids = raw.backedUpRecordIds === undefined ? [] : raw.backedUpRecordIds;
+    if (!Array.isArray(ids) || ids.some((id) => !validId(id)) || new Set(ids.map(String)).size !== ids.length) fail("已备份记录编号不正确");
+    const fingerprint = raw.lastBackupFingerprint === undefined ? null : raw.lastBackupFingerprint;
+    if (fingerprint !== null && (typeof fingerprint !== "string" || !fingerprint)) fail("备份指纹不正确");
+    return { lastBackupAt: at, backedUpRecordIds: [...ids], lastBackupFingerprint: fingerprint };
+  }
+  function normalizePreferences(raw, records) {
+    if (raw === undefined) {
+      const latest = [...records].filter((record) => record.swam).sort((a, b) => b.date.localeCompare(a.date))[0];
+      return { stroke: latest && latest.stroke || "自由泳", pool: latest && latest.pool || "", durationMode: "elapsed" };
+    }
+    if (!isObject(raw)) fail("默认填写偏好格式不正确");
+    const durationMode = raw.durationMode === undefined ? "elapsed" : raw.durationMode;
+    if (!["elapsed", "moving", "unknown"].includes(durationMode)) fail("默认时长口径不正确");
+    return { stroke: text(raw.stroke, "默认泳姿", "自由泳"), pool: text(raw.pool, "默认泳馆", ""), durationMode };
+  }
   function validateState(raw) {
     if (!isObject(raw)) fail("备份须是一个对象");
-    if (raw.version !== undefined && raw.version !== 1 && raw.version !== 2) fail("不支持此备份版本，请使用兼容版本的应用");
+    if (raw.version !== undefined && raw.version !== 1 && raw.version !== 2 && raw.version !== 3) fail("不支持此备份版本，请使用兼容版本的应用");
     if (!Array.isArray(raw.records)) fail("备份缺少有效的记录列表");
     const sourcePhotos = raw.photos === undefined ? {} : raw.photos;
     if (!isObject(sourcePhotos)) fail("照片列表格式不正确");
@@ -67,6 +111,8 @@
       }
       const stroke = record.stroke === undefined || record.stroke === null ? null : text(record.stroke, label + "泳姿");
       if (record.hasPhoto !== undefined && typeof record.hasPhoto !== "boolean") fail(label + "照片状态不正确");
+      const durationMode = record.durationMode === undefined ? "unknown" : record.durationMode;
+      if (!["elapsed", "moving", "unknown"].includes(durationMode)) fail(label + "时长口径不正确");
       return {
         id: record.id,
         date: record.date,
@@ -75,12 +121,13 @@
         stroke,
         distance: number(record.distance, label + "距离", 0),
         duration: number(record.duration, label + "时长", 0),
+        durationMode,
         pool: text(record.pool, label + "泳馆", ""),
         note: text(record.note, label + "备注", ""),
         hasPhoto: own(photos, key),
       };
     });
-    return { version: 2, records, goal: normalizeGoal(raw.goal), photos };
+    return { version: 3, records, goal: normalizeGoal(raw.goal), photos, periodGoals: normalizePeriodGoals(raw.periodGoals), meta: normalizeMeta(raw.meta), preferences: normalizePreferences(raw.preferences, records) };
   }
 
   function paceSeconds(distance, duration) {
@@ -112,11 +159,12 @@
     return '"' + content.replace(/"/g, '""') + '"';
   }
   function toCSV(records) {
-    const header = ["日期", "是否游泳", "心情", "泳姿", "距离(米)", "时间(分钟)", "配速(每百米)", "游泳馆", "备注"];
+    const header = ["日期", "是否游泳", "心情", "泳姿", "距离(米)", "时间(分钟)", "配速(每百米)", "游泳馆", "备注", "时长口径"];
     const rows = [...records].sort((a, b) => a.date.localeCompare(b.date)).map((record) => [
       record.date, record.swam ? "游了" : "没游", record.swam && record.mood ? record.mood.emoji + record.mood.label : "",
       record.swam ? record.stroke || "" : "", record.swam ? record.distance : "", record.swam ? record.duration : "",
       record.swam ? paceStr(record.distance, record.duration) || "" : "", record.pool || "", record.note || "",
+      record.swam ? ({ elapsed: "含休息总时长", moving: "净游泳时长", unknown: "旧记录未标注" }[record.durationMode || "unknown"]) : "",
     ]);
     return "\ufeff" + [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
   }

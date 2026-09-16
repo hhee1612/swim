@@ -15,4 +15,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test tests/core.test.cjs
+      - run: node scripts/build.cjs --check
+      - run: node --test tests/core.test.cjs tests/features.test.cjs
