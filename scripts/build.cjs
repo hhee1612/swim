@@ -31,10 +31,11 @@ const app = "// Generated from app.jsx by Babel 7.23.2; run node scripts/build.c
 const runtimeFiles = [
   "index.html", "app.css", "app.js", "offline.js", "swim-core.js", "swim-features.js",
   "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
+  "icons/pixel-icons.svg", "icons/pixel-pool.svg", "fonts/swim-pixel.woff2",
   "vendor/react-18.2.0.production.min.js", "vendor/react-dom-18.2.0.production.min.js",
 ];
 const assets = runtimeFiles.map((file) => {
-  const isText = !file.endsWith(".png");
+  const isText = /\.(?:html|css|js|svg|webmanifest)$/.test(file);
   const bytes = file === "app.js" ? app : isText ? text(file) : read(file);
   return { path: "./" + file, sha256: sha256(bytes), text: isText };
 });

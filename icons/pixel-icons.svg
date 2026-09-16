@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg"><defs>
+<symbol id="swim" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path d="M14 2h5v2h3v4h-4V6h-3v4h-3V8H9v3H6v3H2v-3h3V8h3V5h5V2zM10 11h4v3h4v2h-6v-2H8v-2h2zM2 17h4v-2h4v2h5v-2h4v2h3v3h-4v-2h-3v3h-5v-3H7v3H2z"/></symbol>
+<symbol id="record" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path d="M8 2h8v2h4v18H4V4h4zm0 5H6v13h12V7h-2v2H8zm2-3v3h4V4zM8 12h8v2H8zm0 4h6v2H8z"/></symbol>
+<symbol id="calendar" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path d="M6 1h2v3h8V1h2v3h4v18H2V4h4zm-2 9v10h16V10zm0-4v2h16V6zM6 12h3v3H6zm5 0h3v3h-3zm5 0h2v3h-2zM6 16h3v2H6zm5 0h3v2h-3z"/></symbol>
+<symbol id="chart" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path d="M3 14h4v8H3zM10 8h4v14h-4zM17 2h4v20h-4z"/></symbol>
+<symbol id="medal" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path d="M2 2h20v8h-3v3h-3v3h2v6H6v-6h2v-3H5v-3H2zm2 2v4h3V4zm5 0v6h2v3h2v-3h2V4zm8 0v4h3V4zM9 16v3h6v-3z"/></symbol>
+<symbol id="share" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path d="M10 2h4v2h2v2h2v3h-3V7h-2v9h-2V7H9v2H6V6h2V4h2zM3 13h3v7h12v-7h3v10H3z"/></symbol>
+<symbol id="backup" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path d="M3 3h18v5h-2v13H5V8H3zm2 2v2h14V5zm2 4v10h10V9zm3 2h4v2h-4z"/></symbol>
+<symbol id="settings" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path fill-rule="evenodd" d="M9 1h6v3h4v4h3v7h-3v4h-4v3H9v-3H5v-4H2V8h3V4h4zm0 7v2H7v4h2v2h6v-2h2v-4h-2V8z"/></symbol>
+<symbol id="search" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path fill-rule="evenodd" d="M5 2h9v2h3v3h2v7h-3v3h-2v2H5v-2H2V5h3zm1 3v2H5v7h2v2h6v-2h3V7h-3V5zM16 17h3v2h3v3h-4v-3h-2z"/></symbol>
+<symbol id="plus" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path d="M10 2h4v8h8v4h-8v8h-4v-8H2v-4h8z"/></symbol>
+</defs></svg>
