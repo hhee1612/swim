@@ -16,4 +16,4 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/build.cjs --check
-      - run: node --test tests/core.test.cjs tests/features.test.cjs
+      - run: node --test tests/core.test.cjs tests/features.test.cjs tests/offline.test.cjs
