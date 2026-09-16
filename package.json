@@ -1,0 +1,12 @@
+{
+  "name": "swim-journal",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Offline-ready swim journal with a pinned, network-free JSX build",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "check": "node scripts/build.cjs --check",
+    "test": "node --test tests/*.test.cjs"
+  }
+}

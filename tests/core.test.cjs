@@ -4,7 +4,7 @@ const Core = require("../swim-core.js");
 
 const photo = "data:image/png;base64,aGVsbG8=";
 const record = (changes = {}) => ({ id: 1, date: "2026-09-16", swam: true, distance: 1000, duration: 20, ...changes });
-const state = (changes = {}) => ({ version: 2, records: [record()], goal: { type: "distance", value: 100 }, photos: {}, ...changes });
+const state = (changes = {}) => ({ version: 3, records: [record()], goal: { type: "distance", value: 100 }, photos: {}, ...changes });
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 function memoryStorage(values = {}) {
@@ -65,7 +65,7 @@ test("legacy backups normalize optional fields and numeric meter goals", () => {
   const original = { version: 1, records: [{ id: 123, date: "2024-02-29", swam: true }], goal: 50000 };
   const normalized = Core.validateState(original);
   assert.deepEqual(normalized.goal, { type: "distance", value: 50 });
-  assert.equal(normalized.version, 2);
+  assert.equal(normalized.version, 3);
   assert.equal(normalized.records[0].distance, 0);
   assert.equal(normalized.records[0].note, "");
   assert.equal(normalized.records[0].hasPhoto, false);
@@ -80,7 +80,7 @@ test("UUID records and safe orphan legacy photos are retained", () => {
 });
 
 test("future versions, malformed records and colliding record IDs are rejected", () => {
-  for (const raw of [null, [], {}, state({ version: 3 }), state({ version: "2" }), state({ records: {} }), state({ records: [null] }), state({ records: [record(), record({ id: "1" })] })]) assert.throws(() => Core.validateState(raw));
+  for (const raw of [null, [], {}, state({ version: 4 }), state({ version: "2" }), state({ records: {} }), state({ records: [null] }), state({ records: [record(), record({ id: "1" })] })]) assert.throws(() => Core.validateState(raw));
   for (const id of [null, {}, [], -1, 1.1, "", "__proto__", "constructor", "a/b"]) assert.throws(() => Core.validateState(state({ records: [record({ id })] })));
 });
 
@@ -149,8 +149,8 @@ test("CSV quotes every field including pace, pool quotes, commas and multiline n
   const csv = Core.toCSV([record({ pool: 'A "水蓝" 泳馆, 2层', note: "第一行\n第二行" })]);
   const rows = parseCSV(csv);
   assert.ok(csv.startsWith("\ufeff"));
-  assert.equal(rows[0].length, 9);
-  assert.equal(rows[1].length, 9);
+  assert.equal(rows[0].length, 10);
+  assert.equal(rows[1].length, 10);
   assert.equal(rows[1][6], "2'00\"");
   assert.equal(rows[1][7], 'A "水蓝" 泳馆, 2层');
   assert.equal(rows[1][8], "第一行\n第二行");
@@ -269,4 +269,88 @@ test("object prototype names cannot become record or photo IDs", () => {
     assert.equal(normalized.photos[id], undefined);
     assert.equal(normalized.records[0].hasPhoto, false);
   }
+});
+
+test("v2 migration preserves records/photos/goals and marks legacy timing as unknown", () => {
+  const legacy = { version: 2, records: [record({ stroke: "蛙泳", pool: "旧泳馆", hasPhoto: true })], goal: { type: "count", value: 30 }, photos: { 1: photo } };
+  const migrated = Core.validateState(legacy);
+  assert.equal(migrated.version, 3);
+  assert.equal(migrated.records[0].durationMode, "unknown");
+  assert.equal(migrated.records[0].distance, 1000);
+  assert.equal(migrated.photos[1], photo);
+  assert.deepEqual(migrated.goal, legacy.goal);
+  assert.deepEqual(migrated.periodGoals, []);
+  assert.deepEqual(migrated.meta, { lastBackupAt: null, backedUpRecordIds: [], lastBackupFingerprint: null });
+  assert.deepEqual(migrated.preferences, { stroke: "蛙泳", pool: "旧泳馆", durationMode: "elapsed" });
+  assert.equal(legacy.records[0].durationMode, undefined);
+});
+
+test("v3 saves retain timing, period goals, backup metadata and explicit input preferences", async () => {
+  const normalized = Core.validateState(state({
+    records: [record({ durationMode: "moving" })],
+    periodGoals: [{ id: "weekly-1", period: "week", type: "count", value: 3, startDate: "2026-09-14", endDate: null }],
+    meta: { lastBackupAt: "2026-09-16T01:00:00.000Z", backedUpRecordIds: [1], lastBackupFingerprint: "test-fingerprint" },
+    preferences: { stroke: "仰泳", pool: "补记泳馆", durationMode: "moving" },
+  }));
+  const harness = databaseHarness();
+  const repository = Core.createRepository({ indexedDB: harness.indexedDB, localStorage: memoryStorage() });
+  assert.deepEqual(await repository.save(normalized), normalized);
+  assert.deepEqual(harness.current, normalized);
+  assert.deepEqual(await repository.load(), normalized);
+});
+
+test("preference migration uses latest swim date, without guessing legacy timing", () => {
+  const migrated = Core.validateState(state({ records: [
+    record({ id: 1, date: "2026-09-02", stroke: "仰泳", pool: "较早" }),
+    record({ id: 2, date: "2026-09-16", swam: false, stroke: null, pool: "休息" }),
+    record({ id: 3, date: "2026-09-15", stroke: "蛙泳", pool: "最近", durationMode: "unknown" }),
+  ] }));
+  assert.deepEqual(migrated.preferences, { stroke: "蛙泳", pool: "最近", durationMode: "elapsed" });
+});
+
+test("v3 timing, preferences and backup metadata reject invalid input types", () => {
+  const bad = [
+    { records: [record({ durationMode: "resting" })] },
+    { preferences: null }, { preferences: { stroke: {} } }, { preferences: { durationMode: "mixed" } },
+    { meta: null }, { meta: { lastBackupAt: "2026-02-30T01:00:00Z" } }, { meta: { lastBackupAt: "2026" } },
+    { meta: { backedUpRecordIds: [1, "1"] } }, { meta: { backedUpRecordIds: ["toString"] } }, { meta: { lastBackupFingerprint: 123 } },
+  ];
+  for (const patch of bad) assert.throws(() => Core.validateState(state(patch)));
+});
+
+test("period goal validation rejects invalid periods, fractions of sessions and reversed dates", () => {
+  const goal = { id: "week-1", period: "week", type: "count", value: 3, startDate: "2026-09-14", endDate: null };
+  for (const patch of [{ period: "year" }, { type: "days" }, { value: 2.5 }, { value: 0 }, { startDate: "2026-02-29" }, { endDate: "2026-09-13" }, { id: "valueOf" }]) assert.throws(() => Core.validateState(state({ periodGoals: [{ ...goal, ...patch }] })));
+  assert.throws(() => Core.validateState(state({ periodGoals: [goal, goal] })));
+  assert.throws(() => Core.validateState(state({ periodGoals: {} })));
+  assert.equal(Core.validateState(state({ periodGoals: [{ ...goal, type: "distance", value: 2.5 }] })).periodGoals[0].value, 2.5);
+});
+
+test("CSV includes elapsed/moving/unknown timing without changing existing columns", () => {
+  for (const [durationMode, label] of [["elapsed", "含休息总时长"], ["moving", "净游泳时长"], ["unknown", "旧记录未标注"]]) {
+    const rows = parseCSV(Core.toCSV([record({ durationMode })]));
+    assert.equal(rows[0][9], "时长口径");
+    assert.equal(rows[1][9], label);
+  }
+});
+
+test("same-period goal intervals reject overlaps including shared boundary days", () => {
+  const base = { id: "first", period: "week", type: "count", value: 1, startDate: "2026-09-01", endDate: null };
+  const next = { ...base, id: "second", value: 5, startDate: "2026-09-14" };
+  for (const goals of [
+    [base, next],
+    [next, base],
+    [{ ...base, endDate: "2026-09-14" }, next],
+    [{ ...base, endDate: "2026-09-20" }, { ...next, endDate: "2026-09-25" }],
+    [{ ...base, type: "distance", value: 10 }, next],
+  ]) assert.throws(() => Core.validateState(state({ periodGoals: goals })), /重叠/);
+});
+
+test("adjacent goal intervals and separate week/month goals remain valid", () => {
+  const old = { id: "first", period: "week", type: "count", value: 1, startDate: "2026-09-01", endDate: "2026-09-13" };
+  const next = { ...old, id: "second", value: 5, startDate: "2026-09-14", endDate: null };
+  const month = { ...old, id: "monthly", period: "month", type: "distance", value: 10, endDate: null };
+  const normalized = Core.validateState(state({ periodGoals: [next, month, old] }));
+  assert.equal(normalized.periodGoals.length, 3);
+  assert.deepEqual(normalized.periodGoals.map((goal) => goal.id), ["second", "monthly", "first"]);
 });
