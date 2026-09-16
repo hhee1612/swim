@@ -89,6 +89,8 @@
       publish({ updateAvailable: true, updating: true, updateBlocked: !safe });
       event.source.postMessage({ type: "SWIM_UPDATE_STATE", token: data.token, safe });
     } else if (data.type === "SWIM_UPDATE_PROGRESS") {
+      // A late coordinator message must not put an already reloaded page back in updating state.
+      if (event.source === navigator.serviceWorker.controller && !pendingController) return;
       publish({ updateAvailable: true, updating: !data.blocked, updateBlocked: !!data.blocked });
     } else if (data.type === "SWIM_OFFLINE_STATUS") {
       const active = navigator.serviceWorker.controller || (registration && registration.active);

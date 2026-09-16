@@ -187,3 +187,11 @@ test("foreground/online checks resume, hidden timer checks pause, and network er
   assert.equal(h.window.swimOffline.ready, true); h.failUpdate(new Error("network failure"));
   await assert.rejects(h.window.swimUpdates.check(), /network failure/); assert.equal(h.window.swimOffline.ready, true); assert.equal(h.window.swimOffline.updating, false);
 });
+
+test("late activation progress cannot leave an already loaded active page updating", async () => {
+  const h = clientHarness(); await settle();
+  assert.equal(h.window.swimOffline.updating, false);
+  h.sw.dispatchEvent({ type: "message", source: h.old, data: { type: "SWIM_UPDATE_PROGRESS", scope: SCOPE, version: "old-release", blocked: false } });
+  assert.equal(h.window.swimOffline.updating, false);
+  assert.equal(h.window.swimOffline.updateAvailable, false);
+});
