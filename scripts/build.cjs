@@ -30,7 +30,8 @@ const app = "// Generated from app.jsx by Babel 7.23.2; run node scripts/build.c
 }).code + "\n";
 const runtimeFiles = [
   "index.html", "app.css", "app.js", "offline.js", "swim-core.js", "swim-features.js",
-  "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
+  "manifest.webmanifest", "icons/swim-pixel-v2.svg", "icons/swim-pixel-v2-180.png",
+  "icons/swim-pixel-v2-192.png", "icons/swim-pixel-v2-512.png", "icons/swim-pixel-v2-maskable-512.png",
   "icons/pixel-icons.svg", "icons/pixel-pool.svg", "fonts/swim-pixel.woff2",
   "vendor/react-18.2.0.production.min.js", "vendor/react-dom-18.2.0.production.min.js",
 ];
