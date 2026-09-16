@@ -3,9 +3,11 @@ function _extends() { _extends = Object.assign ? Object.assign.bind() : function
 const {
   useState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useMemo
 } = React;
+const holdUpdates = () => window.swimUpdates?.setSafeToReload(false);
 const C = SwimCore,
   F = SwimFeatures;
 const STROKES = ["自由泳", "蛙泳", "仰泳", "蝶泳", "混合"];
@@ -175,6 +177,13 @@ function App() {
       updateAvailable: false
     });
   const [today, setToday] = useState(todayStr());
+  const [sharing, setSharing] = useState(false),
+    [checkingUpdates, setCheckingUpdates] = useState(false);
+  const safeToUpdate = !loading && !loadFailed && !busy && !modal && !photoBusy && !importReading && !deleted && !lightbox && !sharing;
+  useLayoutEffect(() => {
+    window.swimUpdates?.setSafeToReload(safeToUpdate);
+  }, [safeToUpdate]);
+  useEffect(() => () => holdUpdates(), []);
   const repo = useRef(null),
     lock = useRef(false),
     fields = useRef(null),
@@ -219,6 +228,7 @@ function App() {
   }, []);
   async function persist(next, restoring = false) {
     if (lock.current || loading || loadFailed && !restoring) return false;
+    holdUpdates();
     lock.current = true;
     setBusy(true);
     try {
@@ -247,6 +257,7 @@ function App() {
   }
   function openAdd(date = today) {
     if (loadFailed || lock.current) return;
+    holdUpdates();
     const p = data.preferences || {
       stroke: "自由泳",
       pool: "",
@@ -272,6 +283,7 @@ function App() {
   }
   function editRecord(r) {
     if (lock.current || loadFailed) return;
+    holdUpdates();
     photoRequest.current++;
     setPhotoBusy(false);
     setFormError("");
@@ -408,6 +420,7 @@ function App() {
     }
   }
   function openGoal(period = "week") {
+    holdUpdates();
     const found = period === "all" ? data.goal : data.periodGoals.find(g => g.period === period && g.startDate <= today && (!g.endDate || g.endDate >= today));
     setGoalDraft({
       period,
@@ -526,30 +539,34 @@ function App() {
     }
   }
   async function shareCard() {
-    const sum = C.summarize(data.records.filter(r => r.date <= today)),
-      c = document.createElement("canvas");
-    c.width = 1080;
-    c.height = 1350;
-    const ctx = c.getContext("2d"),
-      g = ctx.createLinearGradient(0, 0, 1080, 1350);
-    g.addColorStop(0, "#8b4ad3");
-    g.addColorStop(1, "#d85dc4");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 1080, 1350);
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 60px sans-serif";
-    ctx.fillText("你今天游进奥运会了吗", 540, 190);
-    ctx.font = "160px sans-serif";
-    ctx.fillText("🏊", 540, 425);
-    ctx.font = "bold 72px sans-serif";
-    ctx.fillText(sum.dayCount + " 天 · " + fmtNum(sum.totalDistance / 1000) + " km", 540, 680);
-    ctx.font = "42px sans-serif";
-    ctx.fillText("已完成 " + sum.sessionCount + " 次游泳", 540, 790);
-    ctx.fillText("最长连续 " + streaks(data.records, today).longest + " 天", 540, 870);
-    ctx.fillText(today + " · 每一次下水，都算数", 540, 1170);
-    c.toBlob(async blob => {
-      if (!blob) return;
+    if (sharing) return;
+    holdUpdates();
+    setSharing(true);
+    try {
+      const sum = C.summarize(data.records.filter(r => r.date <= today)),
+        c = document.createElement("canvas");
+      c.width = 1080;
+      c.height = 1350;
+      const ctx = c.getContext("2d"),
+        g = ctx.createLinearGradient(0, 0, 1080, 1350);
+      g.addColorStop(0, "#8b4ad3");
+      g.addColorStop(1, "#d85dc4");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 1080, 1350);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 60px sans-serif";
+      ctx.fillText("你今天游进奥运会了吗", 540, 190);
+      ctx.font = "160px sans-serif";
+      ctx.fillText("🏊", 540, 425);
+      ctx.font = "bold 72px sans-serif";
+      ctx.fillText(sum.dayCount + " 天 · " + fmtNum(sum.totalDistance / 1000) + " km", 540, 680);
+      ctx.font = "42px sans-serif";
+      ctx.fillText("已完成 " + sum.sessionCount + " 次游泳", 540, 790);
+      ctx.fillText("最长连续 " + streaks(data.records, today).longest + " 天", 540, 870);
+      ctx.fillText(today + " · 每一次下水，都算数", 540, 1170);
+      const blob = await new Promise(resolve => c.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("分享图片生成失败，请重试。");
       const file = new File([blob], "游泳打卡.png", {
         type: "image/png"
       });
@@ -572,7 +589,31 @@ function App() {
       a.download = "游泳打卡.png";
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10000);
-    }, "image/png");
+    } catch (err) {
+      setNotice("分享失败：" + message(err));
+    } finally {
+      setSharing(false);
+    }
+  }
+  async function checkForUpdates() {
+    if (checkingUpdates) return;
+    if (!online) {
+      setNotice("联网后会自动检查更新");
+      return;
+    }
+    if (!window.swimUpdates) {
+      setNotice("请关闭网站后重新打开，以启用自动更新");
+      return;
+    }
+    setCheckingUpdates(true);
+    try {
+      await window.swimUpdates.check();
+      setNotice("已检查更新，新版准备完成后会自动启用");
+    } catch (err) {
+      setNotice("暂时无法检查更新，恢复网络后会自动重试");
+    } finally {
+      setCheckingUpdates(false);
+    }
   }
   const all = C.summarize(data.records.filter(r => r.date <= today)),
     week = F.periodBounds("week", today),
@@ -624,6 +665,7 @@ function App() {
   const monthRecords = data.records.filter(r => r.date.startsWith(month) && r.date <= today),
     monthStats = C.summarize(monthRecords);
   function openBackup() {
+    holdUpdates();
     importRequest.current++;
     setImportReading(false);
     setFormError("");
@@ -650,7 +692,7 @@ function App() {
   }, React.createElement(Btn, {
     small: true,
     onClick: shareCard,
-    disabled: loadFailed
+    disabled: loadFailed || sharing
   }, "\u5206\u4EAB"), React.createElement(Btn, {
     small: true,
     onClick: openBackup
@@ -661,7 +703,7 @@ function App() {
     role: "status"
   }, React.createElement("span", {
     className: online ? "online-dot" : "offline-dot"
-  }), online ? offline.ready ? "已可离线使用" : offline.error ? "离线资源未就绪" : "正在准备离线使用" : "当前离线", offline.updateAvailable && React.createElement("span", null, " \xB7 \u65B0\u7248\u5DF2\u5C31\u7EEA\uFF0C\u5173\u95ED\u9875\u9762\u540E\u91CD\u65B0\u6253\u5F00\u5373\u53EF\u66F4\u65B0")), loadFailed && React.createElement("section", {
+  }), online ? offline.ready ? "已可离线使用" : offline.error ? "离线资源未就绪" : "正在准备离线使用" : "当前离线", offline.updating ? React.createElement("span", null, " \xB7 \u6B63\u5728\u66F4\u65B0\u81F3\u65B0\u7248\u2026") : offline.updateAvailable && React.createElement("span", null, " \xB7 ", safeToUpdate ? offline.updateBlocked ? "新版已就绪，请先完成或关闭其他页面" : "新版已就绪，即将自动更新" : "新版已就绪，当前操作结束后自动更新")), loadFailed && React.createElement("section", {
     className: "alert",
     role: "alert"
   }, React.createElement("p", null, error), React.createElement("div", {
@@ -837,7 +879,10 @@ function App() {
     disabled: busy,
     onEdit: () => editRecord(r),
     onDelete: () => removeRecord(r),
-    onPhoto: () => setLightbox(data.photos[r.id])
+    onPhoto: () => {
+      holdUpdates();
+      setLightbox(data.photos[r.id]);
+    }
   })) : React.createElement("div", {
     className: "card empty"
   }, React.createElement("span", null, "\uD83C\uDF0A"), React.createElement("h3", null, data.records.length ? "没有符合条件的记录" : "从今天的游泳开始"), React.createElement("p", null, data.records.length ? "换个条件试试，原记录都还在。" : "记下距离、感受，或只记下一次坚持。"), !data.records.length && React.createElement(Btn, {
@@ -892,7 +937,10 @@ function App() {
     photo: data.photos[r.id],
     onEdit: () => editRecord(r),
     onDelete: () => removeRecord(r),
-    onPhoto: () => setLightbox(data.photos[r.id]),
+    onPhoto: () => {
+      holdUpdates();
+      setLightbox(data.photos[r.id]);
+    },
     disabled: busy
   })))), tab === "data" && React.createElement("section", {
     className: "section-stack"
@@ -1032,7 +1080,11 @@ function App() {
   }, React.createElement("span", null, all.dayCount >= b.d ? b.emoji : "🔒"), React.createElement("strong", null, b.name), React.createElement("small", null, all.dayCount >= b.d ? "已获得" : b.d + " 天"))))), React.createElement("footer", null, "\u6570\u636E\u4FDD\u5B58\u5728\u5F53\u524D\u6D4F\u89C8\u5668 \xB7 ", React.createElement("button", {
     className: "text-button",
     onClick: openBackup
-  }, "\u5B9A\u671F\u5BFC\u51FA\u5907\u4EFD")), deleted && React.createElement("div", {
+  }, "\u5B9A\u671F\u5BFC\u51FA\u5907\u4EFD"), React.createElement("br", null), React.createElement("button", {
+    className: "text-button",
+    onClick: checkForUpdates,
+    disabled: checkingUpdates
+  }, checkingUpdates ? "正在检查更新…" : "检查更新"), " \xB7 \u8054\u7F51\u65F6\u81EA\u52A8\u66F4\u65B0"), deleted && React.createElement("div", {
     className: "undo-toast",
     role: "status"
   }, React.createElement("span", null, "\u5DF2\u5220\u9664 ", deleted.record.date, " \u7684\u8BB0\u5F55"), React.createElement(Btn, {

@@ -44,7 +44,7 @@ self.addEventListener("install", (event) => {
       await caches.delete(CACHE_NAME);
       throw error;
     }
-    // Intentionally do not skipWaiting; updates activate after current tabs close.
+    // Installation never activates itself; the safety coordinator below makes that decision.
   })());
 });
 async function status() {
@@ -61,8 +61,89 @@ self.addEventListener("activate", (event) => {
     clients.filter((client) => client.url.startsWith(SCOPE)).forEach((client) => client.postMessage(message));
   })());
 });
+// A waiting worker only accepts explicit safety votes from every in-scope page.
+let activationRound = null;
+let activationTask = null;
+let retryActivation = false;
+let activationAccepted = false;
+let roundCounter = 0;
+async function scopedClients() {
+  const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  return windows.filter((client) => client.url.startsWith(SCOPE));
+}
+async function updateProgress(blocked) {
+  const message = { type: "SWIM_UPDATE_PROGRESS", scope: SCOPE, version: RELEASE, blocked };
+  const clients = await scopedClients();
+  clients.forEach((client) => client.postMessage(message));
+}
+async function endRound(round, blocked) {
+  if (activationRound !== round) return;
+  activationRound = null;
+  clearTimeout(round.timer);
+  try { await updateProgress(blocked); }
+  finally { round.resolve(); }
+}
+async function finishIfSafe(round) {
+  if (activationRound !== round || round.checking || ![...round.votes.values()].every((vote) => vote === true)) return;
+  round.checking = true;
+  const clients = await scopedClients();
+  if (activationRound !== round) return;
+  if (clients.some((client) => !round.votes.has(client.id))) {
+    // A newly opened page has not voted in this round. Ask again with a fresh roster.
+    retryActivation = true;
+    await endRound(round, true);
+    return;
+  }
+  if (!await cacheReady()) { await endRound(round, true); return; }
+  // A synchronous unsafe vote received during either await revokes earlier consent.
+  if (activationRound !== round) return;
+  if (clients.some((client) => round.votes.get(client.id) !== true)) { await endRound(round, true); return; }
+  activationAccepted = true;
+  try { await self.skipWaiting(); }
+  catch (error) { activationAccepted = false; await endRound(round, true); throw error; }
+  await endRound(round, false);
+}
+async function activationAttempt() {
+  if (!await cacheReady()) { await updateProgress(true); return; }
+  const clients = await scopedClients();
+  const token = RELEASE + ":" + (++roundCounter) + ":" + crypto.randomUUID();
+  let resolve;
+  const completion = new Promise((done) => { resolve = done; });
+  const round = { token, votes: new Map(clients.map((client) => [client.id, null])), resolve, checking: false, timer: null };
+  activationRound = round;
+  // Missing/old/background pages never become safe merely because time elapsed.
+  round.timer = setTimeout(() => { endRound(round, true).catch(() => {}); }, 8000);
+  clients.forEach((client) => client.postMessage({ type: "SWIM_UPDATE_PROBE", token, scope: SCOPE, version: RELEASE }));
+  if (clients.length === 0) await finishIfSafe(round);
+  await completion;
+}
+function tryActivation() {
+  if (activationAccepted) return Promise.resolve();
+  if (activationTask) { retryActivation = true; return activationTask; }
+  activationTask = (async () => {
+    do {
+      retryActivation = false;
+      await activationAttempt();
+    } while (retryActivation && !activationAccepted);
+  })().finally(() => { activationTask = null; });
+  return activationTask;
+}
+async function safetyVote(event) {
+  const round = activationRound;
+  const data = event.data;
+  const client = event.source;
+  if (!round || data.token !== round.token || !client || typeof client.url !== "string" || !client.url.startsWith(SCOPE) || !round.votes.has(client.id)) return;
+  round.votes.set(client.id, data.safe === true);
+  if (data.safe !== true) { await endRound(round, true); return; }
+  await finishIfSafe(round);
+}
+
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SWIM_CACHE_STATUS") {
+  if (event.data && event.data.type === "SWIM_TRY_ACTIVATE" && event.source && typeof event.source.url === "string" && event.source.url.startsWith(SCOPE)) {
+    event.waitUntil(tryActivation());
+  } else if (event.data && event.data.type === "SWIM_UPDATE_STATE") {
+    event.waitUntil(safetyVote(event));
+  } else if (event.data && event.data.type === "SWIM_CACHE_STATUS") {
     event.waitUntil(status().then((message) => {
       if (event.ports && event.ports[0]) event.ports[0].postMessage(message);
       else if (event.source) event.source.postMessage(message);

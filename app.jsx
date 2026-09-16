@@ -1,4 +1,5 @@
-const { useState, useEffect, useRef, useMemo } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useMemo } = React;
+const holdUpdates = () => window.swimUpdates?.setSafeToReload(false);
 const C = SwimCore, F = SwimFeatures;
 const STROKES = ["自由泳", "蛙泳", "仰泳", "蝶泳", "混合"];
 const MOODS = [{emoji:"😄",label:"超开心"},{emoji:"🙂",label:"还不错"},{emoji:"😮‍💨",label:"有点累"},{emoji:"😴",label:"好困"},{emoji:"💪",label:"超有劲"}];
@@ -44,6 +45,10 @@ function App(){
   const [incoming,setIncoming]=useState(null),[importMode,setImportMode]=useState("merge"),[conflict,setConflict]=useState("keep"),[importReading,setImportReading]=useState(false);
   const [online,setOnline]=useState(navigator.onLine),[offline,setOffline]=useState(window.swimOffline||{ready:false,updateAvailable:false});
   const [today,setToday]=useState(todayStr());
+  const [sharing,setSharing]=useState(false),[checkingUpdates,setCheckingUpdates]=useState(false);
+  const safeToUpdate=!loading&&!loadFailed&&!busy&&!modal&&!photoBusy&&!importReading&&!deleted&&!lightbox&&!sharing;
+  useLayoutEffect(()=>{window.swimUpdates?.setSafeToReload(safeToUpdate);},[safeToUpdate]);
+  useEffect(()=>()=>holdUpdates(),[]);
   const repo=useRef(null),lock=useRef(false),fields=useRef(null),photoRequest=useRef(0),importRef=useRef(null),importRequest=useRef(0);
   useEffect(()=>{
     let active=true;
@@ -57,7 +62,7 @@ function App(){
   },[]);
   async function persist(next,restoring=false){
     if(lock.current||loading||(loadFailed&&!restoring))return false;
-    lock.current=true;setBusy(true);
+    holdUpdates();lock.current=true;setBusy(true);
     try {if(!repo.current)throw new Error("本机存储不可用，请检查浏览器权限。");const saved=await repo.current.save(C.validateState(next));setData(saved);setError("");setLoadFailed(false);return true;}
     catch(err){setError("保存失败："+message(err)+" 当前数据未更改。");return false;}
     finally{lock.current=false;setBusy(false);}
@@ -65,6 +70,7 @@ function App(){
   function closeModal(){if(lock.current)return;photoRequest.current++;importRequest.current++;setPhotoBusy(false);setImportReading(false);setModal(null);setFormError("");}
   function openAdd(date=today){
     if(loadFailed||lock.current)return;
+    holdUpdates();
     const p=data.preferences||{stroke:"自由泳",pool:"",durationMode:"elapsed"};
     photoRequest.current++;setPhotoBusy(false);setFormError("");
     setForm({id:null,date,swam:true,mood:MOODS[0],stroke:p.stroke||"自由泳",distance:"",duration:"",durationMode:p.durationMode||"elapsed",pool:p.pool||"",note:"",photo:null});
@@ -72,6 +78,7 @@ function App(){
   }
   function editRecord(r){
     if(lock.current||loadFailed)return;
+    holdUpdates();
     photoRequest.current++;setPhotoBusy(false);setFormError("");
     setForm({...r,distance:r.distance?String(r.distance):"",duration:r.duration?String(r.duration):"",photo:data.photos[r.id]||null});
     setModal("record");
@@ -113,6 +120,7 @@ function App(){
     if(await persist({...data,records:[record,...data.records].sort((a,b)=>b.date.localeCompare(a.date)),photos})){setDeleted(null);setNotice("记录和照片已恢复");}
   }
   function openGoal(period="week"){
+    holdUpdates();
     const found=period==="all"?data.goal:data.periodGoals.find(g=>g.period===period&&g.startDate<=today&&(!g.endDate||g.endDate>=today));
     setGoalDraft({period,type:found?.type||(period==="month"?"distance":"count"),value:String(found?.value||(period==="month"?10:3))});
     setFormError("");setModal("goal");
@@ -164,15 +172,30 @@ function App(){
     }catch(err){setFormError("导入失败："+message(err));}
   }
   async function shareCard(){
+    if(sharing)return;
+    holdUpdates();setSharing(true);
+    try {
     const sum=C.summarize(data.records.filter(r=>r.date<=today)),c=document.createElement("canvas");c.width=1080;c.height=1350;
     const ctx=c.getContext("2d"),g=ctx.createLinearGradient(0,0,1080,1350);g.addColorStop(0,"#8b4ad3");g.addColorStop(1,"#d85dc4");
     ctx.fillStyle=g;ctx.fillRect(0,0,1080,1350);ctx.textAlign="center";ctx.fillStyle="#fff";ctx.font="bold 60px sans-serif";ctx.fillText("你今天游进奥运会了吗",540,190);
     ctx.font="160px sans-serif";ctx.fillText("🏊",540,425);ctx.font="bold 72px sans-serif";ctx.fillText(sum.dayCount+" 天 · "+fmtNum(sum.totalDistance/1000)+" km",540,680);
     ctx.font="42px sans-serif";ctx.fillText("已完成 "+sum.sessionCount+" 次游泳",540,790);ctx.fillText("最长连续 "+streaks(data.records,today).longest+" 天",540,870);ctx.fillText(today+" · 每一次下水，都算数",540,1170);
-    c.toBlob(async blob=>{if(!blob)return;const file=new File([blob],"游泳打卡.png",{type:"image/png"});
-      if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:"我的游泳打卡"});return;}catch(err){if(err.name==="AbortError")return;}}
-      const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="游泳打卡.png";a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
-    },"image/png");
+    const blob=await new Promise(resolve=>c.toBlob(resolve,"image/png"));
+    if(!blob)throw new Error("分享图片生成失败，请重试。");
+    const file=new File([blob],"游泳打卡.png",{type:"image/png"});
+    if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:"我的游泳打卡"});return;}catch(err){if(err.name==="AbortError")return;}}
+    const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="游泳打卡.png";a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+    }catch(err){setNotice("分享失败："+message(err));}
+    finally{setSharing(false);}
+  }
+  async function checkForUpdates(){
+    if(checkingUpdates)return;
+    if(!online){setNotice("联网后会自动检查更新");return;}
+    if(!window.swimUpdates){setNotice("请关闭网站后重新打开，以启用自动更新");return;}
+    setCheckingUpdates(true);
+    try{await window.swimUpdates.check();setNotice("已检查更新，新版准备完成后会自动启用");}
+    catch(err){setNotice("暂时无法检查更新，恢复网络后会自动重试");}
+    finally{setCheckingUpdates(false);}
   }
   const all=C.summarize(data.records.filter(r=>r.date<=today)),week=F.periodBounds("week",today),weekStats=C.summarize(F.filterRecords(data.records,{from:week.start,to:today}));
   const streak=streaks(data.records,today),badge=BADGES.filter(b=>b.d<=all.dayCount).at(-1),nextBadge=BADGES.find(b=>b.d>all.dayCount);
@@ -191,15 +214,15 @@ function App(){
   const cumulative=data.goal.type==="distance"?all.totalDistance/1000:data.goal.type==="count"?all.sessionCount:streak.current;
   const cumulativeUnit=data.goal.type==="distance"?"km":data.goal.type==="count"?"次":"天";
   const monthRecords=data.records.filter(r=>r.date.startsWith(month)&&r.date<=today),monthStats=C.summarize(monthRecords);
-  function openBackup(){importRequest.current++;setImportReading(false);setFormError("");setIncoming(null);setModal("backup");}
+  function openBackup(){holdUpdates();importRequest.current++;setImportReading(false);setFormError("");setIncoming(null);setModal("backup");}
   if(loading)return <main className="loading" role="status"><span>🏊</span>正在读取游泳记录…</main>;
 
   return <main className="app-shell">
     <header className="app-header">
       <div className="brand"><span className="brand-icon" aria-hidden="true">🏊</span><div><p className="eyebrow">SWIM JOURNAL</p><h1>游进奥运</h1></div></div>
-      <div className="header-actions"><Btn small onClick={shareCard} disabled={loadFailed}>分享</Btn><Btn small onClick={openBackup}>备份{backup.changed&&data.records.length>0&&<i className="dot" />}</Btn></div>
+      <div className="header-actions"><Btn small onClick={shareCard} disabled={loadFailed||sharing}>分享</Btn><Btn small onClick={openBackup}>备份{backup.changed&&data.records.length>0&&<i className="dot" />}</Btn></div>
     </header>
-    <div className="connection-line" role="status"><span className={online?"online-dot":"offline-dot"}/>{online?(offline.ready?"已可离线使用":offline.error?"离线资源未就绪":"正在准备离线使用"):"当前离线"}{offline.updateAvailable&&<span> · 新版已就绪，关闭页面后重新打开即可更新</span>}</div>
+    <div className="connection-line" role="status"><span className={online?"online-dot":"offline-dot"}/>{online?(offline.ready?"已可离线使用":offline.error?"离线资源未就绪":"正在准备离线使用"):"当前离线"}{offline.updating?<span> · 正在更新至新版…</span>:offline.updateAvailable&&<span> · {safeToUpdate?(offline.updateBlocked?"新版已就绪，请先完成或关闭其他页面":"新版已就绪，即将自动更新"):"新版已就绪，当前操作结束后自动更新"}</span>}</div>
     {loadFailed&&<section className="alert" role="alert"><p>{error}</p><div className="button-row"><Btn small onClick={exportRaw}>导出原始数据</Btn><Btn small onClick={openBackup}>从备份恢复</Btn></div></section>}
     {!loadFailed&&error&&<p className="alert" role="alert">{error}</p>}
     {notice&&<div className="notice" role="status"><span>{notice}</span><button aria-label="关闭提示" onClick={()=>setNotice("")}>×</button></div>}
@@ -231,12 +254,12 @@ function App(){
           <button className="text-button full" onClick={()=>setFilters({query:"",stroke:"",pool:"",from:"",to:""})}>清除全部筛选</button>
         </div>}
       </div>
-      {filtered.length?filtered.map(r=><RecordCard key={r.id} record={r} photo={data.photos[r.id]} disabled={busy} onEdit={()=>editRecord(r)} onDelete={()=>removeRecord(r)} onPhoto={()=>setLightbox(data.photos[r.id])}/>):<div className="card empty"><span>🌊</span><h3>{data.records.length?"没有符合条件的记录":"从今天的游泳开始"}</h3><p>{data.records.length?"换个条件试试，原记录都还在。":"记下距离、感受，或只记下一次坚持。"}</p>{!data.records.length&&<Btn onClick={()=>openAdd()} disabled={loadFailed}>记录第一次游泳</Btn>}</div>}
+      {filtered.length?filtered.map(r=><RecordCard key={r.id} record={r} photo={data.photos[r.id]} disabled={busy} onEdit={()=>editRecord(r)} onDelete={()=>removeRecord(r)} onPhoto={()=>{holdUpdates();setLightbox(data.photos[r.id]);}}/>):<div className="card empty"><span>🌊</span><h3>{data.records.length?"没有符合条件的记录":"从今天的游泳开始"}</h3><p>{data.records.length?"换个条件试试，原记录都还在。":"记下距离、感受，或只记下一次坚持。"}</p>{!data.records.length&&<Btn onClick={()=>openAdd()} disabled={loadFailed}>记录第一次游泳</Btn>}</div>}
     </section>}
     {tab==="calendar"&&<section className="section-stack">
       <div className="card"><Calendar month={month} setMonth={setMonth} records={data.records} today={today} selected={selectedDate} onSelect={date=>{setSelectedDate(date);if(!data.records.some(r=>r.date===date))openAdd(date);}} disabled={busy||loadFailed}/><p className="small muted">点选日期可补记，同一天支持多次游泳。</p></div>
       <div className="card"><div className="section-top"><h2>{month} 月小结</h2></div><div className="metrics three"><Metric label="游泳" value={monthStats.sessionCount} unit="次"/><Metric label="距离" value={fmtNum(monthStats.totalDistance/1000)} unit="km"/><Metric label="时长" value={fmtNum(monthStats.totalTime)} unit="分"/></div></div>
-      {selectedDate&&<div className="section-stack"><div className="section-top"><h2>{selectedDate}</h2><Btn small onClick={()=>openAdd(selectedDate)} disabled={busy||loadFailed||selectedDate>today}>＋ 再记一次</Btn></div>{data.records.filter(r=>r.date===selectedDate).map(r=><RecordCard key={r.id} record={r} photo={data.photos[r.id]} onEdit={()=>editRecord(r)} onDelete={()=>removeRecord(r)} onPhoto={()=>setLightbox(data.photos[r.id])} disabled={busy}/>)}</div>}
+      {selectedDate&&<div className="section-stack"><div className="section-top"><h2>{selectedDate}</h2><Btn small onClick={()=>openAdd(selectedDate)} disabled={busy||loadFailed||selectedDate>today}>＋ 再记一次</Btn></div>{data.records.filter(r=>r.date===selectedDate).map(r=><RecordCard key={r.id} record={r} photo={data.photos[r.id]} onEdit={()=>editRecord(r)} onDelete={()=>removeRecord(r)} onPhoto={()=>{holdUpdates();setLightbox(data.photos[r.id]);}} disabled={busy}/>)}</div>}
     </section>}
     {tab==="data"&&<section className="section-stack">
       <div className="card"><div className="section-top"><h2>看见你的进步</h2></div><div className="filter-grid">
@@ -259,7 +282,7 @@ function App(){
       </details>
     </section>}
     {tab==="badges"&&<section className="section-stack"><div className="card badge-hero"><span>{badge?.emoji||"🌱"}</span><h2>{badge?.name||"等待第一次打卡"}</h2><p>累计 {all.dayCount} 天 · 共 {all.sessionCount} 次游泳</p>{nextBadge&&<p className="muted">再游 {nextBadge.d-all.dayCount} 天，解锁「{nextBadge.name}」</p>}</div><div className="card badge-grid">{BADGES.map(b=><div key={b.d} className={all.dayCount>=b.d?"badge unlocked":"badge"}><span>{all.dayCount>=b.d?b.emoji:"🔒"}</span><strong>{b.name}</strong><small>{all.dayCount>=b.d?"已获得":b.d+" 天"}</small></div>)}</div></section>}
-    <footer>数据保存在当前浏览器 · <button className="text-button" onClick={openBackup}>定期导出备份</button></footer>
+    <footer>数据保存在当前浏览器 · <button className="text-button" onClick={openBackup}>定期导出备份</button><br/><button className="text-button" onClick={checkForUpdates} disabled={checkingUpdates}>{checkingUpdates?"正在检查更新…":"检查更新"}</button> · 联网时自动更新</footer>
     {deleted&&<div className="undo-toast" role="status"><span>已删除 {deleted.record.date} 的记录</span><Btn small onClick={undoDelete} disabled={busy}>撤销删除</Btn><button aria-label="关闭撤销提示" onClick={()=>setDeleted(null)}>×</button></div>}
     {modal==="record"&&form&&<Modal title={form.id===null?"记录一次游泳":"编辑游泳记录"} onClose={closeModal} busy={busy}><form onSubmit={saveRecord} noValidate>
       {formError&&<p className="alert" role="alert">{formError}</p>}{error&&<p className="alert" role="alert">{error}</p>}
