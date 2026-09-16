@@ -85,6 +85,8 @@
     const data = event.data;
     if (!data || data.scope !== scope) return;
     if (data.type === "SWIM_UPDATE_PROBE" && event.source && typeof data.token === "string") {
+      // First-install probes can arrive after this worker has already claimed the page.
+      if (event.source === navigator.serviceWorker.controller && !pendingController) return;
       probe = { worker: event.source, token: data.token };
       publish({ updateAvailable: true, updating: true, updateBlocked: !safe });
       event.source.postMessage({ type: "SWIM_UPDATE_STATE", token: data.token, safe });
@@ -96,7 +98,10 @@
       const active = navigator.serviceWorker.controller || (registration && registration.active);
       if (active && event.source !== active) return;
       publish({ ready: !!data.ready, version: data.version || "", error: data.ready ? "" : "离线资源尚未准备完成，请联网后重试。" });
-      if (data.ready && !pendingController && !(registration && (registration.waiting || registration.installing)) && !checkPromise) publish({ updating: false });
+      if (data.ready && !pendingController && !(registration && (registration.waiting || registration.installing))) {
+        publish({ updateAvailable: false, updateBlocked: false });
+        if (!checkPromise) publish({ updating: false });
+      }
       if (pendingController === event.source && !data.ready) publish({ updating: false, updateBlocked: true });
       if (pendingController === event.source && data.ready && data.version) {
         pendingVersion = data.version;

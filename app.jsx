@@ -176,10 +176,17 @@ function App(){
     holdUpdates();setSharing(true);
     try {
     const sum=C.summarize(data.records.filter(r=>r.date<=today)),c=document.createElement("canvas");c.width=1080;c.height=1350;
-    const ctx=c.getContext("2d"),g=ctx.createLinearGradient(0,0,1080,1350);g.addColorStop(0,"#8b4ad3");g.addColorStop(1,"#d85dc4");
-    ctx.fillStyle=g;ctx.fillRect(0,0,1080,1350);ctx.textAlign="center";ctx.fillStyle="#fff";ctx.font="bold 60px sans-serif";ctx.fillText("你今天游进奥运会了吗",540,190);
-    ctx.font="160px sans-serif";ctx.fillText("🏊",540,425);ctx.font="bold 72px sans-serif";ctx.fillText(sum.dayCount+" 天 · "+fmtNum(sum.totalDistance/1000)+" km",540,680);
-    ctx.font="42px sans-serif";ctx.fillText("已完成 "+sum.sessionCount+" 次游泳",540,790);ctx.fillText("最长连续 "+streaks(data.records,today).longest+" 天",540,870);ctx.fillText(today+" · 每一次下水，都算数",540,1170);
+    const ctx=c.getContext("2d");ctx.imageSmoothingEnabled=false;
+    ctx.fillStyle="#F1ECE0";ctx.fillRect(0,0,1080,1350);ctx.fillStyle="#117C0D";ctx.fillRect(70,70,32,32);ctx.fillRect(102,102,16,16);
+    ctx.textAlign="left";ctx.font="bold 36px sans-serif";ctx.fillText("游进奥运",140,108);
+    ctx.textAlign="center";ctx.font="bold 76px sans-serif";ctx.fillText("每一次下水，",540,250);ctx.fillText("都算数。",540,350);
+    const poolImage=new Image();await new Promise((resolve,reject)=>{poolImage.onload=resolve;poolImage.onerror=()=>reject(new Error("分享插画未能加载"));poolImage.src="./icons/pixel-pool.svg";});
+    ctx.drawImage(poolImage,300,405,480,330);
+    await document.fonts?.load("64px SwimPixel","0123456789.,/:+-");
+    const metrics=[{x:220,value:fmtNum(sum.totalDistance/1000),label:"累计公里"},{x:540,value:String(sum.sessionCount),label:"游泳次数"},{x:860,value:String(sum.dayCount),label:"打卡天数"}];
+    for(const metric of metrics){ctx.fillStyle="#117C0D";ctx.font="64px SwimPixel, monospace";ctx.fillText(metric.value,metric.x,845);ctx.fillStyle="#5D6558";ctx.font="30px sans-serif";ctx.fillText(metric.label,metric.x,912);}
+    ctx.fillStyle="#FAC75E";ctx.fillRect(88,987,904,105);ctx.fillStyle="#26352B";ctx.font="bold 34px sans-serif";ctx.fillText("最长连续 "+streaks(data.records,today).longest+" 天，每一步都算数",540,1054);
+    ctx.fillStyle="#5D6558";ctx.font="30px sans-serif";ctx.fillText(today+" · 我的游泳日记",540,1222);
     const blob=await new Promise(resolve=>c.toBlob(resolve,"image/png"));
     if(!blob)throw new Error("分享图片生成失败，请重试。");
     const file=new File([blob],"游泳打卡.png",{type:"image/png"});
@@ -215,36 +222,38 @@ function App(){
   const cumulativeUnit=data.goal.type==="distance"?"km":data.goal.type==="count"?"次":"天";
   const monthRecords=data.records.filter(r=>r.date.startsWith(month)&&r.date<=today),monthStats=C.summarize(monthRecords);
   function openBackup(){holdUpdates();importRequest.current++;setImportReading(false);setFormError("");setIncoming(null);setModal("backup");}
-  if(loading)return <main className="loading" role="status"><span>🏊</span>正在读取游泳记录…</main>;
+  if(loading)return <main className="loading" role="status"><Icon name="swim"/>正在读取游泳记录…</main>;
 
-  return <main className="app-shell">
+  return <main className={"app-shell tab-"+tab}>
     <header className="app-header">
-      <div className="brand"><span className="brand-icon" aria-hidden="true">🏊</span><div><p className="eyebrow">SWIM JOURNAL</p><h1>游进奥运</h1></div></div>
-      <div className="header-actions"><Btn small onClick={shareCard} disabled={loadFailed||sharing}>分享</Btn><Btn small onClick={openBackup}>备份{backup.changed&&data.records.length>0&&<i className="dot" />}</Btn></div>
+      <div className="brand"><span className="brand-icon"><Icon name="swim"/></span><h1>游进奥运</h1></div>
+      <div className="header-actions"><Btn small onClick={shareCard} disabled={loadFailed||sharing}><Icon name="share"/>分享</Btn><Btn small onClick={openBackup}><Icon name="backup"/>备份{backup.changed&&data.records.length>0&&<i className="dot" />}</Btn></div>
     </header>
     <div className="connection-line" role="status"><span className={online?"online-dot":"offline-dot"}/>{online?(offline.ready?"已可离线使用":offline.error?"离线资源未就绪":"正在准备离线使用"):"当前离线"}{offline.updating?<span> · 正在更新至新版…</span>:offline.updateAvailable&&<span> · {safeToUpdate?(offline.updateBlocked?"新版已就绪，请先完成或关闭其他页面":"新版已就绪，即将自动更新"):"新版已就绪，当前操作结束后自动更新"}</span>}</div>
     {loadFailed&&<section className="alert" role="alert"><p>{error}</p><div className="button-row"><Btn small onClick={exportRaw}>导出原始数据</Btn><Btn small onClick={openBackup}>从备份恢复</Btn></div></section>}
     {!loadFailed&&error&&<p className="alert" role="alert">{error}</p>}
     {notice&&<div className="notice" role="status"><span>{notice}</span><button aria-label="关闭提示" onClick={()=>setNotice("")}>×</button></div>}
-    <section className="welcome">
-      <div><p className="eyebrow">每一次下水，都算数</p><h2>今天，给自己一点进步。</h2><p className="muted">你今天游进奥运会了吗？</p></div>
-      <Btn primary onClick={()=>openAdd()} disabled={busy||loadFailed}>＋ 记录今天</Btn>
-    </section>
-    <section className="week-summary card" aria-label="本周概况">
-      <div className="section-top"><h2>本周概况</h2><span className="muted small">{week.start.slice(5)} — {week.end.slice(5)}</span></div>
-      <div className="metrics three"><Metric label="游泳次数" value={weekStats.sessionCount} unit="次"/><Metric label="游泳距离" value={fmtNum(weekStats.totalDistance/1000)} unit="km"/><Metric label="打卡天数" value={weekStats.dayCount} unit="天"/></div>
-    </section>
-    <section className="period-goals" aria-label="周期目标">
-      {activeGoals.map(({period,goal})=>goal?<GoalCard key={period} period={period} goal={goal} progress={F.periodProgress(data.records,goal,today)} onEdit={()=>openGoal(period)} disabled={busy||loadFailed}/>:<button key={period} className="goal-placeholder" onClick={()=>openGoal(period)} disabled={busy||loadFailed}><span>{period==="week"?"本周":"本月"}目标</span><strong>＋ 设定{period==="week"?"每周次数":"每月距离"}</strong></button>)}
-    </section>
-    <div className="badge-strip"><span>{badge?.emoji||"🌱"} {badge?.name||"从第一次下水开始"}</span><span>累计 {all.dayCount} 天 · 连续 {streak.current} 天</span></div>
-    {backup.changed&&data.records.length>0&&<button className="backup-nudge" onClick={openBackup}><span>{backup.unbackedCount>0?backup.unbackedCount+" 条新增记录待备份":"记录或目标有更新，建议备份"}</span><span>去备份 ›</span></button>}
-    <nav className="tabs" aria-label="主视图">{[["records","记录"],["calendar","日历"],["data","进步"],["badges","勋章"]].map(([key,label])=><button key={key} aria-pressed={tab===key} className={tab===key?"active":""} onClick={()=>setTab(key)}>{label}</button>)}</nav>
+    {tab==="records"&&<>
+      <section className="welcome">
+        <div className="hero-row"><div className="hero-copy"><h2>每一次下水，<br/>都算数。</h2><p>慢慢游，也在前进。</p></div><img className="hero-pool" src="./icons/pixel-pool.svg" width="160" height="110" alt="像素风小泳池"/></div>
+        <Btn primary onClick={()=>openAdd()} disabled={busy||loadFailed} aria-label="＋ 记录今天"><Icon name="plus"/>记录今天</Btn>
+      </section>
+      <section className="week-summary" aria-label="本周概况">
+        <div className="section-top"><h2>本周概况</h2><span className="muted small">{week.start.slice(5)} — {week.end.slice(5)}</span></div>
+        <div className="metrics three"><Metric label="游泳距离" value={fmtNum(weekStats.totalDistance/1000)} unit="km"/><Metric label="游泳次数" value={weekStats.sessionCount} unit="次"/><Metric label="打卡天数" value={weekStats.dayCount} unit="天"/></div>
+      </section>
+      <section className="period-goals" aria-label="周期目标">
+        {activeGoals.filter(({period})=>period==="week").map(({period,goal})=>goal?<GoalCard key={period} period={period} goal={goal} progress={F.periodProgress(data.records,goal,today)} onEdit={()=>openGoal(period)} disabled={busy||loadFailed}/>:<button key={period} className="goal-placeholder" onClick={()=>openGoal(period)} disabled={busy||loadFailed}><span><Icon name="medal"/>本周目标</span><strong>＋ 设定每周次数</strong></button>)}
+      </section>
+    </>}
+    {tab!=="records"&&<div className="page-intro"><div><p className="eyebrow">我的游泳日记</p><h2>{{calendar:"日历",data:"一点点进步",badges:"我的勋章"}[tab]}</h2></div><Btn small onClick={()=>openAdd()} disabled={busy||loadFailed} aria-label="＋ 记录今天"><Icon name="plus"/>记一次</Btn></div>}
+    {backup.changed&&data.records.length>0&&<button className="backup-nudge" onClick={openBackup}><span><Icon name="backup"/>{backup.unbackedCount>0?backup.unbackedCount+" 条新增记录待备份":"记录或目标有更新，建议备份"}</span><span>去备份 ›</span></button>}
+    <nav className="tabs" aria-label="主视图">{[["records","记录","record"],["calendar","日历","calendar"],["data","进步","chart"],["badges","勋章","medal"]].map(([key,label,icon])=><button key={key} aria-pressed={tab===key} className={tab===key?"active":""} onClick={()=>setTab(key)}><Icon name={icon}/><span>{label}</span></button>)}</nav>
     {tab==="records"&&<section aria-label="历史记录" className="section-stack">
-      <div className="card filters">
-        <label className="search-field"><span aria-hidden="true">⌕</span><input aria-label="搜索备注或泳馆" placeholder="搜索备注、泳馆…" value={filters.query} onChange={e=>setFilters({...filters,query:e.target.value})}/></label>
-        <div className="section-top compact"><span className="small muted">显示 {filtered.length} / {data.records.length} 条记录</span><button className="text-button" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(!filtersOpen)}>{filtersOpen?"收起筛选":"筛选记录"}</button></div>
-        {filtersOpen&&<div className="filter-grid">
+      <div className="records-heading"><div><h2>最近记录</h2><span className="small muted">{Object.values(filters).some(Boolean)?"显示 "+filtered.length+" / "+data.records.length+" 条":"共 "+data.records.length+" 条记录"}</span></div><button className={"filter-toggle "+(Object.values(filters).some(Boolean)?"has-filter":"")} aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(!filtersOpen)}><Icon name="search"/>{filtersOpen?"收起筛选":"筛选记录"}</button></div>
+      {filtersOpen&&<div className="card filters">
+        <label className="search-field"><Icon name="search"/><input aria-label="搜索备注或泳馆" placeholder="搜索备注、泳馆…" value={filters.query} onChange={e=>setFilters({...filters,query:e.target.value})}/></label>
+        <div className="filter-grid">
           <Field label="泳姿"><select aria-label="筛选泳姿" value={filters.stroke} onChange={e=>setFilters({...filters,stroke:e.target.value})}><option value="">全部泳姿</option>{STROKES.map(s=><option key={s}>{s}</option>)}</select></Field>
           <Field label="泳馆"><select aria-label="筛选泳馆" value={filters.pool} onChange={e=>setFilters({...filters,pool:e.target.value})}><option value="">全部泳馆</option>{pools.map(p=><option key={p}>{p}</option>)}</select></Field>
           <Field label="开始日期"><input aria-label="筛选开始日期" type="date" value={filters.from} onChange={e=>setFilters({...filters,from:e.target.value})}/></Field>
@@ -252,9 +261,9 @@ function App(){
           {!validFilters&&<p role="alert" className="field-error full">请输入有效的四位年份日期。</p>}
           {filters.from&&filters.to&&filters.from>filters.to&&<p className="field-error full">结束日期应不早于开始日期。</p>}
           <button className="text-button full" onClick={()=>setFilters({query:"",stroke:"",pool:"",from:"",to:""})}>清除全部筛选</button>
-        </div>}
-      </div>
-      {filtered.length?filtered.map(r=><RecordCard key={r.id} record={r} photo={data.photos[r.id]} disabled={busy} onEdit={()=>editRecord(r)} onDelete={()=>removeRecord(r)} onPhoto={()=>{holdUpdates();setLightbox(data.photos[r.id]);}}/>):<div className="card empty"><span>🌊</span><h3>{data.records.length?"没有符合条件的记录":"从今天的游泳开始"}</h3><p>{data.records.length?"换个条件试试，原记录都还在。":"记下距离、感受，或只记下一次坚持。"}</p>{!data.records.length&&<Btn onClick={()=>openAdd()} disabled={loadFailed}>记录第一次游泳</Btn>}</div>}
+        </div>
+      </div>}
+      {filtered.length?filtered.map(r=><RecordCard key={r.id} record={r} photo={data.photos[r.id]} disabled={busy} onEdit={()=>editRecord(r)} onDelete={()=>removeRecord(r)} onPhoto={()=>{holdUpdates();setLightbox(data.photos[r.id]);}}/>):<div className="card empty"><Icon name="swim"/><h3>{data.records.length?"没有符合条件的记录":"从今天的游泳开始"}</h3><p>{data.records.length?"换个条件试试，原记录都还在。":"记下距离、感受，或只记下一次坚持。"}</p>{!data.records.length&&<Btn onClick={()=>openAdd()} disabled={loadFailed}>记录第一次游泳</Btn>}</div>}
     </section>}
     {tab==="calendar"&&<section className="section-stack">
       <div className="card"><Calendar month={month} setMonth={setMonth} records={data.records} today={today} selected={selectedDate} onSelect={date=>{setSelectedDate(date);if(!data.records.some(r=>r.date===date))openAdd(date);}} disabled={busy||loadFailed}/><p className="small muted">点选日期可补记，同一天支持多次游泳。</p></div>
@@ -262,13 +271,16 @@ function App(){
       {selectedDate&&<div className="section-stack"><div className="section-top"><h2>{selectedDate}</h2><Btn small onClick={()=>openAdd(selectedDate)} disabled={busy||loadFailed||selectedDate>today}>＋ 再记一次</Btn></div>{data.records.filter(r=>r.date===selectedDate).map(r=><RecordCard key={r.id} record={r} photo={data.photos[r.id]} onEdit={()=>editRecord(r)} onDelete={()=>removeRecord(r)} onPhoto={()=>{holdUpdates();setLightbox(data.photos[r.id]);}} disabled={busy}/>)}</div>}
     </section>}
     {tab==="data"&&<section className="section-stack">
+      <section className="period-goals month-goal" aria-label="本月目标">
+        {activeGoals.filter(({period})=>period==="month").map(({period,goal})=>goal?<GoalCard key={period} period={period} goal={goal} progress={F.periodProgress(data.records,goal,today)} onEdit={()=>openGoal(period)} disabled={busy||loadFailed}/>:<button key={period} className="goal-placeholder" onClick={()=>openGoal(period)} disabled={busy||loadFailed}><span><Icon name="medal"/>本月目标</span><strong>＋ 设定每月距离</strong></button>)}
+      </section>
       <div className="card"><div className="section-top"><h2>看见你的进步</h2></div><div className="filter-grid">
         <Field label="比较周期"><select aria-label="比较周期" value={trend.period} onChange={e=>setTrend({...trend,period:e.target.value})}><option value="week">本周 / 上周</option><option value="month">本月 / 上月</option></select></Field>
         <Field label="泳姿"><select aria-label="趋势泳姿" value={trend.stroke} onChange={e=>setTrend({...trend,stroke:e.target.value})}>{STROKES.map(s=><option key={s}>{s}</option>)}</select></Field>
         <Field label="时长口径" className="full"><select aria-label="趋势时长口径" value={trend.durationMode} onChange={e=>setTrend({...trend,durationMode:e.target.value})}>{Object.entries(MODES).map(([key,label])=><option key={key} value={key}>{label}{key==="unknown"?"（旧记录）":""}</option>)}</select></Field>
       </div><div className="comparison">
-        <div><span>{trend.period==="week"?"本周":"本月"}</span><strong>{fmtNum(comparison.current.totalDistance/1000)} <small>km</small></strong><p>{comparison.current.sessionCount} 次 · {comparison.current.avgPace||"—"} /100m</p></div>
-        <div><span>{trend.period==="week"?"上周":"上月"}</span><strong>{fmtNum(comparison.previous.totalDistance/1000)} <small>km</small></strong><p>{comparison.previous.sessionCount} 次 · {comparison.previous.avgPace||"—"} /100m</p></div>
+        <div><span>{trend.period==="week"?"本周":"本月"}</span><strong><span className="metric-value">{fmtNum(comparison.current.totalDistance/1000)}</span> <small>km</small></strong><p>{comparison.current.sessionCount} 次 · {comparison.current.avgPace||"—"} /100m</p></div>
+        <div><span>{trend.period==="week"?"上周":"上月"}</span><strong><span className="metric-value">{fmtNum(comparison.previous.totalDistance/1000)}</span> <small>km</small></strong><p>{comparison.previous.sessionCount} 次 · {comparison.previous.avgPace||"—"} /100m</p></div>
       </div><p className="small muted">仅比较所选泳姿与计时方式。当前周期未结束时，数据为阶段结果。</p></div>
       <div className="card"><div className="section-top"><h2>配速趋势</h2><span className="small muted">最近 {points.length} 个训练日</span></div><PaceChart points={points}/><p className="small muted">数值越小，配速越快；未填写距离或时长的记录不计入。</p></div>
       <div className="card"><div className="section-top"><h2>累计目标</h2><Btn small onClick={()=>openGoal("all")} disabled={busy||loadFailed}>修改</Btn></div><Progress current={cumulative} target={data.goal.value}/><p className="goal-copy">{fmtNum(cumulative)} / {fmtNum(data.goal.value)} {cumulativeUnit}{cumulative>=data.goal.value?" · 已达成 🎉":""}</p><div className="metrics three"><Metric label="总距离" value={fmtNum(all.totalDistance/1000)} unit="km"/><Metric label="总次数" value={all.sessionCount} unit="次"/><Metric label="最长连续" value={streak.longest} unit="天"/></div></div>
@@ -281,7 +293,7 @@ function App(){
         <h3>泳姿统计</h3><ul className="stroke-counts">{STROKES.map(stroke=><li key={stroke}><span>{stroke}</span><b>{swims.filter(r=>r.stroke===stroke).length} 次</b></li>)}</ul>
       </details>
     </section>}
-    {tab==="badges"&&<section className="section-stack"><div className="card badge-hero"><span>{badge?.emoji||"🌱"}</span><h2>{badge?.name||"等待第一次打卡"}</h2><p>累计 {all.dayCount} 天 · 共 {all.sessionCount} 次游泳</p>{nextBadge&&<p className="muted">再游 {nextBadge.d-all.dayCount} 天，解锁「{nextBadge.name}」</p>}</div><div className="card badge-grid">{BADGES.map(b=><div key={b.d} className={all.dayCount>=b.d?"badge unlocked":"badge"}><span>{all.dayCount>=b.d?b.emoji:"🔒"}</span><strong>{b.name}</strong><small>{all.dayCount>=b.d?"已获得":b.d+" 天"}</small></div>)}</div></section>}
+    {tab==="badges"&&<section className="section-stack"><div className="card badge-hero"><span>{badge?.emoji||"🌱"}</span><h2>{badge?.name||"等待第一次打卡"}</h2><p>累计 {all.dayCount} 天 · 共 {all.sessionCount} 次游泳</p><p className="muted">当前连续 {streak.current} 天</p>{nextBadge&&<p className="muted">再游 {nextBadge.d-all.dayCount} 天，解锁「{nextBadge.name}」</p>}</div><div className="card badge-grid">{BADGES.map(b=><div key={b.d} className={all.dayCount>=b.d?"badge unlocked":"badge"}><span>{all.dayCount>=b.d?b.emoji:"🔒"}</span><strong>{b.name}</strong><small>{all.dayCount>=b.d?"已获得":b.d+" 天"}</small></div>)}</div></section>}
     <footer>数据保存在当前浏览器 · <button className="text-button" onClick={openBackup}>定期导出备份</button><br/><button className="text-button" onClick={checkForUpdates} disabled={checkingUpdates}>{checkingUpdates?"正在检查更新…":"检查更新"}</button> · 联网时自动更新</footer>
     {deleted&&<div className="undo-toast" role="status"><span>已删除 {deleted.record.date} 的记录</span><Btn small onClick={undoDelete} disabled={busy}>撤销删除</Btn><button aria-label="关闭撤销提示" onClick={()=>setDeleted(null)}>×</button></div>}
     {modal==="record"&&form&&<Modal title={form.id===null?"记录一次游泳":"编辑游泳记录"} onClose={closeModal} busy={busy}><form onSubmit={saveRecord} noValidate>
@@ -327,11 +339,12 @@ function App(){
   </main>;
 }
 
+function Icon({name,className=""}){return <svg className={"pixel-icon "+className} viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href={"./icons/pixel-icons.svg#"+name}/></svg>;}
 function Btn({children,primary,small,wide,className="",type="button",...props}){return <button type={type} className={["btn",primary&&"primary",small&&"small-btn",wide&&"wide",className].filter(Boolean).join(" ")} {...props}>{children}</button>;}
 function Field({label,children,className=""}){return <div className={"field "+className} role="group" aria-label={label}><span>{label}</span>{children}</div>;}
-function Metric({label,value,unit}){return <div className="metric"><strong>{value}<small>{unit}</small></strong><span>{label}</span></div>;}
+function Metric({label,value,unit}){return <div className="metric"><strong><span className="metric-value">{value}</span><small>{unit}</small></strong><span>{label}</span></div>;}
 function Progress({current,target}){const pct=Math.min(100,Math.max(0,current/target*100));return <div className="progress" role="progressbar" aria-label="目标进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(pct.toFixed(1))}><i style={{width:pct+"%"}}/></div>;}
-function GoalCard({period,goal,progress,onEdit,disabled}){return <div className={"goal-card "+(progress.done?"goal-done":"")}><div className="section-top"><span>{period==="week"?"本周":"本月"}目标{progress.done?" ✓":""}</span><button className="text-button" onClick={onEdit} disabled={disabled}>修改</button></div><strong>{fmtNum(progress.current)}<small> / {fmtNum(goal.value)} {goal.type==="distance"?"km":"次"}</small></strong><Progress current={progress.current} target={goal.value}/></div>;}
+function GoalCard({period,goal,progress,onEdit,disabled}){return <div className={"goal-card "+(progress.done?"goal-done":"")}><div className="goal-line"><span className="goal-caption"><Icon name="medal"/>{period==="week"?"本周":"本月"}目标{progress.done?" ✓":""}</span><button className="goal-value" onClick={onEdit} disabled={disabled} aria-label={"修改"+(period==="week"?"本周":"本月")+"目标"}><strong className="metric-value">{fmtNum(progress.current)} / {fmtNum(goal.value)}</strong><small>{goal.type==="distance"?"km":"次"}</small><Icon name="settings"/></button></div><Progress current={progress.current} target={goal.value}/></div>;}
 function Modal({title,children,onClose,busy=false}){
   const element=useRef(null),close=useRef(onClose),saving=useRef(busy);close.current=onClose;saving.current=busy;
   useEffect(()=>{
@@ -349,8 +362,8 @@ function RecordCard({record:r,photo,disabled,onEdit,onDelete,onPhoto}){
   return <article className="card record-card">
     <div className="section-top"><time dateTime={r.date}>{r.date}</time><div className="record-actions"><button onClick={onEdit} disabled={disabled} aria-label={"编辑 "+r.date+" 的记录"}>编辑</button><button onClick={onDelete} disabled={disabled} aria-label={"删除 "+r.date+" 的记录"}>删除</button></div></div>
     <div className="record-heading"><span>{r.swam?r.mood?.emoji||"🏊":"🛋️"}</span><h3>{r.swam?r.stroke||"游泳":"休息日"}</h3><span className="record-mood">{r.swam?r.mood?.label:"给自己一点恢复时间"}</span></div>
-    {r.swam&&<div className="record-stats">{r.distance>0&&<strong>{fmtNum(r.distance)} <small>米</small></strong>}{r.duration>0&&<span>{fmtNum(r.duration)} 分钟 · {MODES[r.durationMode||"unknown"]}</span>}{pace&&<span className="record-pace">{pace} /100m</span>}</div>}
-    {r.pool&&<p className="record-pool">📍 {r.pool}</p>}{r.note&&<p className="record-note">{r.note}</p>}
+    {r.swam&&<div className="record-stats">{r.distance>0&&<strong><span className="metric-value">{fmtNum(r.distance)}</span> <small>米</small></strong>}{r.duration>0&&<span>{fmtNum(r.duration)} 分钟 · {MODES[r.durationMode||"unknown"]}</span>}{pace&&<span className="record-pace">{pace} /100m</span>}</div>}
+    {r.pool&&<p className="record-pool">泳馆 · {r.pool}</p>}{r.note&&<p className="record-note">{r.note}</p>}
     {photo&&<button className="photo-button" onClick={onPhoto} aria-label={"查看 "+r.date+" 的游泳照片"}><img src={photo} alt="游泳照片" loading="lazy"/></button>}
   </article>;
 }
@@ -358,14 +371,14 @@ function Calendar({month,setMonth,records,today,selected,onSelect,disabled}){
   const [year,m]=month.split("-").map(Number),offset=(new Date(Date.UTC(year,m-1,1)).getUTCDay()+6)%7,days=new Date(Date.UTC(year,m,0)).getUTCDate();
   const counts={};for(const r of records){if(!counts[r.date])counts[r.date]={swam:0,rest:0};counts[r.date][r.swam?"swam":"rest"]++;}
   function move(n){const date=new Date(Date.UTC(year,m-1+n,1));setMonth(date.toISOString().slice(0,7));}
-  return <><div className="calendar-heading"><button aria-label="上个月" onClick={()=>move(-1)}>‹</button><h2>{year} 年 {m} 月</h2><button aria-label="下个月" onClick={()=>move(1)}>›</button></div><div className="calendar-grid">{["一","二","三","四","五","六","日"].map(x=><span key={x} className="weekday">{x}</span>)}{Array.from({length:offset},(_,i)=><span key={"blank"+i}/>)}{Array.from({length:days},(_,i)=>{const day=i+1,date=month+"-"+String(day).padStart(2,"0"),count=counts[date];return <button key={date} className={["calendar-day",count?.swam&&"swam-day",count?.rest&&!count?.swam&&"rest-day",date===today&&"today",date===selected&&"selected-day"].filter(Boolean).join(" ")} aria-label={date+(count?.swam?"，游泳 "+count.swam+" 次":"")} aria-pressed={date===selected} disabled={disabled||date>today} onClick={()=>onSelect(date)}><strong>{day}</strong><small>{count?.swam?count.swam+"次":count?.rest?"休息":"·"}</small></button>;})}</div></>;
+  return <><div className="calendar-heading"><button aria-label="上个月" onClick={()=>move(-1)}>‹</button><h2>{year} 年 {m} 月</h2><button aria-label="下个月" onClick={()=>move(1)}>›</button></div><div className="calendar-grid">{["一","二","三","四","五","六","日"].map(x=><span key={x} className="weekday">{x}</span>)}{Array.from({length:offset},(_,i)=><span key={"blank"+i}/>)}{Array.from({length:days},(_,i)=>{const day=i+1,date=month+"-"+String(day).padStart(2,"0"),count=counts[date];return <button key={date} className={["calendar-day",count?.swam&&"swam-day",count?.rest&&!count?.swam&&"rest-day",date===today&&"today",date===selected&&"selected-day"].filter(Boolean).join(" ")} aria-label={date+(count?.swam?"，游泳 "+count.swam+" 次":"")} aria-pressed={date===selected} disabled={disabled||date>today} onClick={()=>onSelect(date)}><strong className="metric-value">{day}</strong><small>{count?.swam?count.swam+"次":count?.rest?"休息":"·"}</small></button>;})}</div></>;
 }
 function PaceChart({points}){
   if(!points.length)return <div className="chart-empty">所选泳姿和计时方式还没有有效配速记录。</div>;
   const values=points.map(p=>p.seconds),min=Math.min(...values),max=Math.max(...values),range=Math.max(15,max-min),lower=Math.max(0,min-range*.15),upper=max+range*.15;
   const x=i=>points.length===1?190:62+i*(268/(points.length-1)),y=value=>24+(upper-value)/(upper-lower)*132;
   const path=points.map((p,i)=>(i?"L":"M")+x(i)+","+y(p.seconds)).join(" ");
-  return <><svg viewBox="0 0 360 198" className="pace-chart" role="img" aria-label={"最近"+points.length+"个训练日的每百米配速"}>{[lower,(lower+upper)/2,upper].map(v=><g key={v}><line x1="58" x2="338" y1={y(v)} y2={y(v)} stroke="#eadff3" strokeDasharray="3 4"/><text x="50" y={y(v)+4} textAnchor="end" className="chart-label">{C.fmtPace(v)}</text></g>)}<path d={path} fill="none" stroke="#9950d7" strokeWidth="3" strokeLinejoin="round"/>{points.map((p,i)=><circle key={p.date} cx={x(i)} cy={y(p.seconds)} r="4" fill="#a855db"><title>{p.date+"："+C.fmtPace(p.seconds)+"/100m"}</title></circle>)}<text x="62" y="186" className="chart-label">{points[0].date.slice(5)}</text><text x="338" y="186" textAnchor="end" className="chart-label">{points.at(-1).date.slice(5)}</text></svg><details className="chart-details"><summary>查看每日配速</summary><table><thead><tr><th>日期</th><th>配速 /100m</th></tr></thead><tbody>{points.map(p=><tr key={p.date}><td>{p.date}</td><td>{C.fmtPace(p.seconds)}</td></tr>)}</tbody></table></details></>;
+  return <><svg viewBox="0 0 360 198" className="pace-chart" role="img" aria-label={"最近"+points.length+"个训练日的每百米配速"}>{[lower,(lower+upper)/2,upper].map(v=><g key={v}><line x1="58" x2="338" y1={y(v)} y2={y(v)} stroke="#D9DDCB" strokeDasharray="3 4"/><text x="50" y={y(v)+4} textAnchor="end" className="chart-label">{C.fmtPace(v)}</text></g>)}<path d={path} fill="none" stroke="#117C0D" strokeWidth="3" strokeLinejoin="miter"/>{points.map((p,i)=><rect key={p.date} x={x(i)-3} y={y(p.seconds)-3} width="6" height="6" fill="#117C0D"><title>{p.date+"："+C.fmtPace(p.seconds)+"/100m"}</title></rect>)}<text x="62" y="186" className="chart-label">{points[0].date.slice(5)}</text><text x="338" y="186" textAnchor="end" className="chart-label">{points.at(-1).date.slice(5)}</text></svg><details className="chart-details"><summary>查看每日配速</summary><table><thead><tr><th>日期</th><th>配速 /100m</th></tr></thead><tbody>{points.map(p=><tr key={p.date}><td>{p.date}</td><td>{C.fmtPace(p.seconds)}</td></tr>)}</tbody></table></details></>;
 }
 function DistanceBars({items}){
   if(!items.length)return <p className="helper">记录距离后，这里会出现图表。</p>;

@@ -547,24 +547,57 @@ function App() {
         c = document.createElement("canvas");
       c.width = 1080;
       c.height = 1350;
-      const ctx = c.getContext("2d"),
-        g = ctx.createLinearGradient(0, 0, 1080, 1350);
-      g.addColorStop(0, "#8b4ad3");
-      g.addColorStop(1, "#d85dc4");
-      ctx.fillStyle = g;
+      const ctx = c.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = "#F1ECE0";
       ctx.fillRect(0, 0, 1080, 1350);
+      ctx.fillStyle = "#117C0D";
+      ctx.fillRect(70, 70, 32, 32);
+      ctx.fillRect(102, 102, 16, 16);
+      ctx.textAlign = "left";
+      ctx.font = "bold 36px sans-serif";
+      ctx.fillText("游进奥运", 140, 108);
       ctx.textAlign = "center";
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 60px sans-serif";
-      ctx.fillText("你今天游进奥运会了吗", 540, 190);
-      ctx.font = "160px sans-serif";
-      ctx.fillText("🏊", 540, 425);
-      ctx.font = "bold 72px sans-serif";
-      ctx.fillText(sum.dayCount + " 天 · " + fmtNum(sum.totalDistance / 1000) + " km", 540, 680);
-      ctx.font = "42px sans-serif";
-      ctx.fillText("已完成 " + sum.sessionCount + " 次游泳", 540, 790);
-      ctx.fillText("最长连续 " + streaks(data.records, today).longest + " 天", 540, 870);
-      ctx.fillText(today + " · 每一次下水，都算数", 540, 1170);
+      ctx.font = "bold 76px sans-serif";
+      ctx.fillText("每一次下水，", 540, 250);
+      ctx.fillText("都算数。", 540, 350);
+      const poolImage = new Image();
+      await new Promise((resolve, reject) => {
+        poolImage.onload = resolve;
+        poolImage.onerror = () => reject(new Error("分享插画未能加载"));
+        poolImage.src = "./icons/pixel-pool.svg";
+      });
+      ctx.drawImage(poolImage, 300, 405, 480, 330);
+      await document.fonts?.load("64px SwimPixel", "0123456789.,/:+-");
+      const metrics = [{
+        x: 220,
+        value: fmtNum(sum.totalDistance / 1000),
+        label: "累计公里"
+      }, {
+        x: 540,
+        value: String(sum.sessionCount),
+        label: "游泳次数"
+      }, {
+        x: 860,
+        value: String(sum.dayCount),
+        label: "打卡天数"
+      }];
+      for (const metric of metrics) {
+        ctx.fillStyle = "#117C0D";
+        ctx.font = "64px SwimPixel, monospace";
+        ctx.fillText(metric.value, metric.x, 845);
+        ctx.fillStyle = "#5D6558";
+        ctx.font = "30px sans-serif";
+        ctx.fillText(metric.label, metric.x, 912);
+      }
+      ctx.fillStyle = "#FAC75E";
+      ctx.fillRect(88, 987, 904, 105);
+      ctx.fillStyle = "#26352B";
+      ctx.font = "bold 34px sans-serif";
+      ctx.fillText("最长连续 " + streaks(data.records, today).longest + " 天，每一步都算数", 540, 1054);
+      ctx.fillStyle = "#5D6558";
+      ctx.font = "30px sans-serif";
+      ctx.fillText(today + " · 我的游泳日记", 540, 1222);
       const blob = await new Promise(resolve => c.toBlob(resolve, "image/png"));
       if (!blob) throw new Error("分享图片生成失败，请重试。");
       const file = new File([blob], "游泳打卡.png", {
@@ -675,28 +708,33 @@ function App() {
   if (loading) return React.createElement("main", {
     className: "loading",
     role: "status"
-  }, React.createElement("span", null, "\uD83C\uDFCA"), "\u6B63\u5728\u8BFB\u53D6\u6E38\u6CF3\u8BB0\u5F55\u2026");
+  }, React.createElement(Icon, {
+    name: "swim"
+  }), "\u6B63\u5728\u8BFB\u53D6\u6E38\u6CF3\u8BB0\u5F55\u2026");
   return React.createElement("main", {
-    className: "app-shell"
+    className: "app-shell tab-" + tab
   }, React.createElement("header", {
     className: "app-header"
   }, React.createElement("div", {
     className: "brand"
   }, React.createElement("span", {
-    className: "brand-icon",
-    "aria-hidden": "true"
-  }, "\uD83C\uDFCA"), React.createElement("div", null, React.createElement("p", {
-    className: "eyebrow"
-  }, "SWIM JOURNAL"), React.createElement("h1", null, "\u6E38\u8FDB\u5965\u8FD0"))), React.createElement("div", {
+    className: "brand-icon"
+  }, React.createElement(Icon, {
+    name: "swim"
+  })), React.createElement("h1", null, "\u6E38\u8FDB\u5965\u8FD0")), React.createElement("div", {
     className: "header-actions"
   }, React.createElement(Btn, {
     small: true,
     onClick: shareCard,
     disabled: loadFailed || sharing
-  }, "\u5206\u4EAB"), React.createElement(Btn, {
+  }, React.createElement(Icon, {
+    name: "share"
+  }), "\u5206\u4EAB"), React.createElement(Btn, {
     small: true,
     onClick: openBackup
-  }, "\u5907\u4EFD", backup.changed && data.records.length > 0 && React.createElement("i", {
+  }, React.createElement(Icon, {
+    name: "backup"
+  }), "\u5907\u4EFD", backup.changed && data.records.length > 0 && React.createElement("i", {
     className: "dot"
   })))), React.createElement("div", {
     className: "connection-line",
@@ -723,18 +761,27 @@ function App() {
   }, React.createElement("span", null, notice), React.createElement("button", {
     "aria-label": "\u5173\u95ED\u63D0\u793A",
     onClick: () => setNotice("")
-  }, "\xD7")), React.createElement("section", {
+  }, "\xD7")), tab === "records" && React.createElement(React.Fragment, null, React.createElement("section", {
     className: "welcome"
-  }, React.createElement("div", null, React.createElement("p", {
-    className: "eyebrow"
-  }, "\u6BCF\u4E00\u6B21\u4E0B\u6C34\uFF0C\u90FD\u7B97\u6570"), React.createElement("h2", null, "\u4ECA\u5929\uFF0C\u7ED9\u81EA\u5DF1\u4E00\u70B9\u8FDB\u6B65\u3002"), React.createElement("p", {
-    className: "muted"
-  }, "\u4F60\u4ECA\u5929\u6E38\u8FDB\u5965\u8FD0\u4F1A\u4E86\u5417\uFF1F")), React.createElement(Btn, {
+  }, React.createElement("div", {
+    className: "hero-row"
+  }, React.createElement("div", {
+    className: "hero-copy"
+  }, React.createElement("h2", null, "\u6BCF\u4E00\u6B21\u4E0B\u6C34\uFF0C", React.createElement("br", null), "\u90FD\u7B97\u6570\u3002"), React.createElement("p", null, "\u6162\u6162\u6E38\uFF0C\u4E5F\u5728\u524D\u8FDB\u3002")), React.createElement("img", {
+    className: "hero-pool",
+    src: "./icons/pixel-pool.svg",
+    width: "160",
+    height: "110",
+    alt: "\u50CF\u7D20\u98CE\u5C0F\u6CF3\u6C60"
+  })), React.createElement(Btn, {
     primary: true,
     onClick: () => openAdd(),
-    disabled: busy || loadFailed
-  }, "\uFF0B \u8BB0\u5F55\u4ECA\u5929")), React.createElement("section", {
-    className: "week-summary card",
+    disabled: busy || loadFailed,
+    "aria-label": "\uFF0B \u8BB0\u5F55\u4ECA\u5929"
+  }, React.createElement(Icon, {
+    name: "plus"
+  }), "\u8BB0\u5F55\u4ECA\u5929")), React.createElement("section", {
+    className: "week-summary",
     "aria-label": "\u672C\u5468\u6982\u51B5"
   }, React.createElement("div", {
     className: "section-top"
@@ -743,13 +790,13 @@ function App() {
   }, week.start.slice(5), " \u2014 ", week.end.slice(5))), React.createElement("div", {
     className: "metrics three"
   }, React.createElement(Metric, {
-    label: "\u6E38\u6CF3\u6B21\u6570",
-    value: weekStats.sessionCount,
-    unit: "\u6B21"
-  }), React.createElement(Metric, {
     label: "\u6E38\u6CF3\u8DDD\u79BB",
     value: fmtNum(weekStats.totalDistance / 1000),
     unit: "km"
+  }), React.createElement(Metric, {
+    label: "\u6E38\u6CF3\u6B21\u6570",
+    value: weekStats.sessionCount,
+    unit: "\u6B21"
   }), React.createElement(Metric, {
     label: "\u6253\u5361\u5929\u6570",
     value: weekStats.dayCount,
@@ -757,7 +804,9 @@ function App() {
   }))), React.createElement("section", {
     className: "period-goals",
     "aria-label": "\u5468\u671F\u76EE\u6807"
-  }, activeGoals.map(({
+  }, activeGoals.filter(({
+    period
+  }) => period === "week").map(({
     period,
     goal
   }) => goal ? React.createElement(GoalCard, {
@@ -772,29 +821,58 @@ function App() {
     className: "goal-placeholder",
     onClick: () => openGoal(period),
     disabled: busy || loadFailed
-  }, React.createElement("span", null, period === "week" ? "本周" : "本月", "\u76EE\u6807"), React.createElement("strong", null, "\uFF0B \u8BBE\u5B9A", period === "week" ? "每周次数" : "每月距离")))), React.createElement("div", {
-    className: "badge-strip"
-  }, React.createElement("span", null, badge?.emoji || "🌱", " ", badge?.name || "从第一次下水开始"), React.createElement("span", null, "\u7D2F\u8BA1 ", all.dayCount, " \u5929 \xB7 \u8FDE\u7EED ", streak.current, " \u5929")), backup.changed && data.records.length > 0 && React.createElement("button", {
+  }, React.createElement("span", null, React.createElement(Icon, {
+    name: "medal"
+  }), "\u672C\u5468\u76EE\u6807"), React.createElement("strong", null, "\uFF0B \u8BBE\u5B9A\u6BCF\u5468\u6B21\u6570"))))), tab !== "records" && React.createElement("div", {
+    className: "page-intro"
+  }, React.createElement("div", null, React.createElement("p", {
+    className: "eyebrow"
+  }, "\u6211\u7684\u6E38\u6CF3\u65E5\u8BB0"), React.createElement("h2", null, {
+    calendar: "日历",
+    data: "一点点进步",
+    badges: "我的勋章"
+  }[tab])), React.createElement(Btn, {
+    small: true,
+    onClick: () => openAdd(),
+    disabled: busy || loadFailed,
+    "aria-label": "\uFF0B \u8BB0\u5F55\u4ECA\u5929"
+  }, React.createElement(Icon, {
+    name: "plus"
+  }), "\u8BB0\u4E00\u6B21")), backup.changed && data.records.length > 0 && React.createElement("button", {
     className: "backup-nudge",
     onClick: openBackup
-  }, React.createElement("span", null, backup.unbackedCount > 0 ? backup.unbackedCount + " 条新增记录待备份" : "记录或目标有更新，建议备份"), React.createElement("span", null, "\u53BB\u5907\u4EFD \u203A")), React.createElement("nav", {
+  }, React.createElement("span", null, React.createElement(Icon, {
+    name: "backup"
+  }), backup.unbackedCount > 0 ? backup.unbackedCount + " 条新增记录待备份" : "记录或目标有更新，建议备份"), React.createElement("span", null, "\u53BB\u5907\u4EFD \u203A")), React.createElement("nav", {
     className: "tabs",
     "aria-label": "\u4E3B\u89C6\u56FE"
-  }, [["records", "记录"], ["calendar", "日历"], ["data", "进步"], ["badges", "勋章"]].map(([key, label]) => React.createElement("button", {
+  }, [["records", "记录", "record"], ["calendar", "日历", "calendar"], ["data", "进步", "chart"], ["badges", "勋章", "medal"]].map(([key, label, icon]) => React.createElement("button", {
     key: key,
     "aria-pressed": tab === key,
     className: tab === key ? "active" : "",
     onClick: () => setTab(key)
-  }, label))), tab === "records" && React.createElement("section", {
+  }, React.createElement(Icon, {
+    name: icon
+  }), React.createElement("span", null, label)))), tab === "records" && React.createElement("section", {
     "aria-label": "\u5386\u53F2\u8BB0\u5F55",
     className: "section-stack"
   }, React.createElement("div", {
+    className: "records-heading"
+  }, React.createElement("div", null, React.createElement("h2", null, "\u6700\u8FD1\u8BB0\u5F55"), React.createElement("span", {
+    className: "small muted"
+  }, Object.values(filters).some(Boolean) ? "显示 " + filtered.length + " / " + data.records.length + " 条" : "共 " + data.records.length + " 条记录")), React.createElement("button", {
+    className: "filter-toggle " + (Object.values(filters).some(Boolean) ? "has-filter" : ""),
+    "aria-expanded": filtersOpen,
+    onClick: () => setFiltersOpen(!filtersOpen)
+  }, React.createElement(Icon, {
+    name: "search"
+  }), filtersOpen ? "收起筛选" : "筛选记录")), filtersOpen && React.createElement("div", {
     className: "card filters"
   }, React.createElement("label", {
     className: "search-field"
-  }, React.createElement("span", {
-    "aria-hidden": "true"
-  }, "\u2315"), React.createElement("input", {
+  }, React.createElement(Icon, {
+    name: "search"
+  }), React.createElement("input", {
     "aria-label": "\u641C\u7D22\u5907\u6CE8\u6216\u6CF3\u9986",
     placeholder: "\u641C\u7D22\u5907\u6CE8\u3001\u6CF3\u9986\u2026",
     value: filters.query,
@@ -803,14 +881,6 @@ function App() {
       query: e.target.value
     })
   })), React.createElement("div", {
-    className: "section-top compact"
-  }, React.createElement("span", {
-    className: "small muted"
-  }, "\u663E\u793A ", filtered.length, " / ", data.records.length, " \u6761\u8BB0\u5F55"), React.createElement("button", {
-    className: "text-button",
-    "aria-expanded": filtersOpen,
-    onClick: () => setFiltersOpen(!filtersOpen)
-  }, filtersOpen ? "收起筛选" : "筛选记录")), filtersOpen && React.createElement("div", {
     className: "filter-grid"
   }, React.createElement(Field, {
     label: "\u6CF3\u59FF"
@@ -885,7 +955,9 @@ function App() {
     }
   })) : React.createElement("div", {
     className: "card empty"
-  }, React.createElement("span", null, "\uD83C\uDF0A"), React.createElement("h3", null, data.records.length ? "没有符合条件的记录" : "从今天的游泳开始"), React.createElement("p", null, data.records.length ? "换个条件试试，原记录都还在。" : "记下距离、感受，或只记下一次坚持。"), !data.records.length && React.createElement(Btn, {
+  }, React.createElement(Icon, {
+    name: "swim"
+  }), React.createElement("h3", null, data.records.length ? "没有符合条件的记录" : "从今天的游泳开始"), React.createElement("p", null, data.records.length ? "换个条件试试，原记录都还在。" : "记下距离、感受，或只记下一次坚持。"), !data.records.length && React.createElement(Btn, {
     onClick: () => openAdd(),
     disabled: loadFailed
   }, "\u8BB0\u5F55\u7B2C\u4E00\u6B21\u6E38\u6CF3"))), tab === "calendar" && React.createElement("section", {
@@ -944,7 +1016,29 @@ function App() {
     disabled: busy
   })))), tab === "data" && React.createElement("section", {
     className: "section-stack"
-  }, React.createElement("div", {
+  }, React.createElement("section", {
+    className: "period-goals month-goal",
+    "aria-label": "\u672C\u6708\u76EE\u6807"
+  }, activeGoals.filter(({
+    period
+  }) => period === "month").map(({
+    period,
+    goal
+  }) => goal ? React.createElement(GoalCard, {
+    key: period,
+    period: period,
+    goal: goal,
+    progress: F.periodProgress(data.records, goal, today),
+    onEdit: () => openGoal(period),
+    disabled: busy || loadFailed
+  }) : React.createElement("button", {
+    key: period,
+    className: "goal-placeholder",
+    onClick: () => openGoal(period),
+    disabled: busy || loadFailed
+  }, React.createElement("span", null, React.createElement(Icon, {
+    name: "medal"
+  }), "\u672C\u6708\u76EE\u6807"), React.createElement("strong", null, "\uFF0B \u8BBE\u5B9A\u6BCF\u6708\u8DDD\u79BB")))), React.createElement("div", {
     className: "card"
   }, React.createElement("div", {
     className: "section-top"
@@ -989,7 +1083,11 @@ function App() {
     value: key
   }, label, key === "unknown" ? "（旧记录）" : ""))))), React.createElement("div", {
     className: "comparison"
-  }, React.createElement("div", null, React.createElement("span", null, trend.period === "week" ? "本周" : "本月"), React.createElement("strong", null, fmtNum(comparison.current.totalDistance / 1000), " ", React.createElement("small", null, "km")), React.createElement("p", null, comparison.current.sessionCount, " \u6B21 \xB7 ", comparison.current.avgPace || "—", " /100m")), React.createElement("div", null, React.createElement("span", null, trend.period === "week" ? "上周" : "上月"), React.createElement("strong", null, fmtNum(comparison.previous.totalDistance / 1000), " ", React.createElement("small", null, "km")), React.createElement("p", null, comparison.previous.sessionCount, " \u6B21 \xB7 ", comparison.previous.avgPace || "—", " /100m"))), React.createElement("p", {
+  }, React.createElement("div", null, React.createElement("span", null, trend.period === "week" ? "本周" : "本月"), React.createElement("strong", null, React.createElement("span", {
+    className: "metric-value"
+  }, fmtNum(comparison.current.totalDistance / 1000)), " ", React.createElement("small", null, "km")), React.createElement("p", null, comparison.current.sessionCount, " \u6B21 \xB7 ", comparison.current.avgPace || "—", " /100m")), React.createElement("div", null, React.createElement("span", null, trend.period === "week" ? "上周" : "上月"), React.createElement("strong", null, React.createElement("span", {
+    className: "metric-value"
+  }, fmtNum(comparison.previous.totalDistance / 1000)), " ", React.createElement("small", null, "km")), React.createElement("p", null, comparison.previous.sessionCount, " \u6B21 \xB7 ", comparison.previous.avgPace || "—", " /100m"))), React.createElement("p", {
     className: "small muted"
   }, "\u4EC5\u6BD4\u8F83\u6240\u9009\u6CF3\u59FF\u4E0E\u8BA1\u65F6\u65B9\u5F0F\u3002\u5F53\u524D\u5468\u671F\u672A\u7ED3\u675F\u65F6\uFF0C\u6570\u636E\u4E3A\u9636\u6BB5\u7ED3\u679C\u3002")), React.createElement("div", {
     className: "card"
@@ -1070,7 +1168,9 @@ function App() {
     className: "section-stack"
   }, React.createElement("div", {
     className: "card badge-hero"
-  }, React.createElement("span", null, badge?.emoji || "🌱"), React.createElement("h2", null, badge?.name || "等待第一次打卡"), React.createElement("p", null, "\u7D2F\u8BA1 ", all.dayCount, " \u5929 \xB7 \u5171 ", all.sessionCount, " \u6B21\u6E38\u6CF3"), nextBadge && React.createElement("p", {
+  }, React.createElement("span", null, badge?.emoji || "🌱"), React.createElement("h2", null, badge?.name || "等待第一次打卡"), React.createElement("p", null, "\u7D2F\u8BA1 ", all.dayCount, " \u5929 \xB7 \u5171 ", all.sessionCount, " \u6B21\u6E38\u6CF3"), React.createElement("p", {
+    className: "muted"
+  }, "\u5F53\u524D\u8FDE\u7EED ", streak.current, " \u5929"), nextBadge && React.createElement("p", {
     className: "muted"
   }, "\u518D\u6E38 ", nextBadge.d - all.dayCount, " \u5929\uFF0C\u89E3\u9501\u300C", nextBadge.name, "\u300D")), React.createElement("div", {
     className: "card badge-grid"
@@ -1397,6 +1497,19 @@ function App() {
     alt: "\u6E38\u6CF3\u7167\u7247"
   })));
 }
+function Icon({
+  name,
+  className = ""
+}) {
+  return React.createElement("svg", {
+    className: "pixel-icon " + className,
+    viewBox: "0 0 24 24",
+    "aria-hidden": "true",
+    focusable: "false"
+  }, React.createElement("use", {
+    href: "./icons/pixel-icons.svg#" + name
+  }));
+}
 function Btn({
   children,
   primary,
@@ -1429,7 +1542,9 @@ function Metric({
 }) {
   return React.createElement("div", {
     className: "metric"
-  }, React.createElement("strong", null, value, React.createElement("small", null, unit)), React.createElement("span", null, label));
+  }, React.createElement("strong", null, React.createElement("span", {
+    className: "metric-value"
+  }, value), React.createElement("small", null, unit)), React.createElement("span", null, label));
 }
 function Progress({
   current,
@@ -1459,12 +1574,21 @@ function GoalCard({
   return React.createElement("div", {
     className: "goal-card " + (progress.done ? "goal-done" : "")
   }, React.createElement("div", {
-    className: "section-top"
-  }, React.createElement("span", null, period === "week" ? "本周" : "本月", "\u76EE\u6807", progress.done ? " ✓" : ""), React.createElement("button", {
-    className: "text-button",
+    className: "goal-line"
+  }, React.createElement("span", {
+    className: "goal-caption"
+  }, React.createElement(Icon, {
+    name: "medal"
+  }), period === "week" ? "本周" : "本月", "\u76EE\u6807", progress.done ? " ✓" : ""), React.createElement("button", {
+    className: "goal-value",
     onClick: onEdit,
-    disabled: disabled
-  }, "\u4FEE\u6539")), React.createElement("strong", null, fmtNum(progress.current), React.createElement("small", null, " / ", fmtNum(goal.value), " ", goal.type === "distance" ? "km" : "次")), React.createElement(Progress, {
+    disabled: disabled,
+    "aria-label": "修改" + (period === "week" ? "本周" : "本月") + "目标"
+  }, React.createElement("strong", {
+    className: "metric-value"
+  }, fmtNum(progress.current), " / ", fmtNum(goal.value)), React.createElement("small", null, goal.type === "distance" ? "km" : "次"), React.createElement(Icon, {
+    name: "settings"
+  }))), React.createElement(Progress, {
     current: progress.current,
     target: goal.value
   }));
@@ -1566,11 +1690,13 @@ function RecordCard({
     className: "record-mood"
   }, r.swam ? r.mood?.label : "给自己一点恢复时间")), r.swam && React.createElement("div", {
     className: "record-stats"
-  }, r.distance > 0 && React.createElement("strong", null, fmtNum(r.distance), " ", React.createElement("small", null, "\u7C73")), r.duration > 0 && React.createElement("span", null, fmtNum(r.duration), " \u5206\u949F \xB7 ", MODES[r.durationMode || "unknown"]), pace && React.createElement("span", {
+  }, r.distance > 0 && React.createElement("strong", null, React.createElement("span", {
+    className: "metric-value"
+  }, fmtNum(r.distance)), " ", React.createElement("small", null, "\u7C73")), r.duration > 0 && React.createElement("span", null, fmtNum(r.duration), " \u5206\u949F \xB7 ", MODES[r.durationMode || "unknown"]), pace && React.createElement("span", {
     className: "record-pace"
   }, pace, " /100m")), r.pool && React.createElement("p", {
     className: "record-pool"
-  }, "\uD83D\uDCCD ", r.pool), r.note && React.createElement("p", {
+  }, "\u6CF3\u9986 \xB7 ", r.pool), r.note && React.createElement("p", {
     className: "record-note"
   }, r.note), photo && React.createElement("button", {
     className: "photo-button",
@@ -1636,7 +1762,9 @@ function Calendar({
       "aria-pressed": date === selected,
       disabled: disabled || date > today,
       onClick: () => onSelect(date)
-    }, React.createElement("strong", null, day), React.createElement("small", null, count?.swam ? count.swam + "次" : count?.rest ? "休息" : "·"));
+    }, React.createElement("strong", {
+      className: "metric-value"
+    }, day), React.createElement("small", null, count?.swam ? count.swam + "次" : count?.rest ? "休息" : "·"));
   })));
 }
 function PaceChart({
@@ -1666,7 +1794,7 @@ function PaceChart({
     x2: "338",
     y1: y(v),
     y2: y(v),
-    stroke: "#eadff3",
+    stroke: "#D9DDCB",
     strokeDasharray: "3 4"
   }), React.createElement("text", {
     x: "50",
@@ -1676,15 +1804,16 @@ function PaceChart({
   }, C.fmtPace(v)))), React.createElement("path", {
     d: path,
     fill: "none",
-    stroke: "#9950d7",
+    stroke: "#117C0D",
     strokeWidth: "3",
-    strokeLinejoin: "round"
-  }), points.map((p, i) => React.createElement("circle", {
+    strokeLinejoin: "miter"
+  }), points.map((p, i) => React.createElement("rect", {
     key: p.date,
-    cx: x(i),
-    cy: y(p.seconds),
-    r: "4",
-    fill: "#a855db"
+    x: x(i) - 3,
+    y: y(p.seconds) - 3,
+    width: "6",
+    height: "6",
+    fill: "#117C0D"
   }, React.createElement("title", null, p.date + "：" + C.fmtPace(p.seconds) + "/100m"))), React.createElement("text", {
     x: "62",
     y: "186",

@@ -195,3 +195,33 @@ test("late activation progress cannot leave an already loaded active page updati
   assert.equal(h.window.swimOffline.updating, false);
   assert.equal(h.window.swimOffline.updateAvailable, false);
 });
+
+test("late first-install probes settle without hiding a genuinely waiting update", async () => {
+  const h = clientHarness({ initialController: false, installing: true }); await settle();
+  h.window.swimUpdates.setSafeToReload(true);
+  h.probe(h.old, "during-first-install");
+  assert.equal(h.window.swimOffline.updateAvailable, true);
+  h.registration.installing = null;
+  h.sw.dispatchEvent({ type: "message", source: h.old, data: { type: "SWIM_OFFLINE_STATUS", scope: SCOPE, version: "old-release", ready: true } });
+  assert.equal(h.window.swimOffline.updateAvailable, false);
+  h.change(h.old); await settle();
+  // Browser sequence: ready -> late current-controller probe -> ready statuses -> progress.
+  h.probe(h.old, "late-first-install");
+  assert.equal(h.window.swimOffline.updateAvailable, false);
+  for (let i = 0; i < 6; i++) h.sw.dispatchEvent({ type: "message", source: h.old, data: { type: "SWIM_OFFLINE_STATUS", scope: SCOPE, version: "old-release", ready: true } });
+  h.sw.dispatchEvent({ type: "message", source: h.old, data: { type: "SWIM_UPDATE_PROGRESS", scope: SCOPE, version: "old-release", blocked: false } });
+  assert.equal(h.window.swimOffline.ready, true);
+  assert.equal(h.window.swimOffline.updating, false);
+  assert.equal(h.window.swimOffline.updateBlocked, false);
+  assert.equal(h.window.swimOffline.updateAvailable, false);
+  assert.equal(h.reloads(), 0);
+
+  const waiting = h.worker("new-release"); h.registration.waiting = waiting;
+  h.window.swimUpdates.setSafeToReload(false); h.probe(waiting, "actual-update");
+  h.sw.dispatchEvent({ type: "message", source: h.old, data: { type: "SWIM_OFFLINE_STATUS", scope: SCOPE, version: "old-release", ready: true } });
+  h.probe(h.old, "stale-while-new-waits");
+  assert.equal(h.window.swimOffline.updateAvailable, true);
+  assert.equal(h.window.swimOffline.updateBlocked, true);
+  assert.ok(h.messages.some(item => item.worker === waiting && item.data.token === "actual-update" && item.data.safe === false));
+  assert.equal(h.reloads(), 0);
+});
